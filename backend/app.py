@@ -58,6 +58,8 @@ client = weaviate.connect_to_local()
 
 assert client.is_live()
 
+# testing
+
 client.collections.delete_all()
 client.collections.create(
         "CNNArticle",
