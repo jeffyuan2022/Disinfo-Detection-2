@@ -67,10 +67,12 @@ client.collections.create(
             wc.Property(name="source", data_type=wc.DataType.TEXT)
         ],
         vectorizer_config=wc.Configure.Vectorizer.text2vec_google(
-            project_id="compelling-cat-438822-a0"
+            api_key=GOOGLE_GENAI_API_KEY,
+            project_id=PROJECT_ID
         ),
         generative_config=wc.Configure.Generative.google(
-            project_id="compelling-cat-438822-a0"
+            api_key=GOOGLE_GENAI_API_KEY,
+            project_id=PROJECT_ID
         )
     )
 
@@ -155,7 +157,7 @@ CNN = client.collections.get("CNNArticle")
 #     print(o.properties["title"])  # Print the title
 # print(response.generated)  # Print the generated text (the commonalities between them)
 
-genai.configure(api_key="AIzaSyDXcri4Y7zFjuwapkvq3nC6HbZbYJej9Pw")
+genai.configure(api_key=GOOGLE_GENAI_API_KEY)
 
 generation_config = {
   "temperature": 1,
