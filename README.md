@@ -82,7 +82,7 @@ Mesop UI provides the frontend for the chatbot. Once the Python backend is runni
 This project was developed as part of a team effort. The following individuals contributed to the development of this disinformation detection chatbot:
 
 - **Yiheng Yuan**
-- **Lauren Zhang**
+- **Luren Zhang**
 - **Jade Zhou**
 
 ### Mentor:
