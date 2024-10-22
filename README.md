@@ -36,3 +36,55 @@ To install the dependencies, you can use:
 pip install -r requirements.txt
 ```
 
+## Setup Instructions
+
+### Step 1: Clone the Repository
+```bash
+git clone https://github.com/jeffyuan2022/Disinfo-Detection.git
+cd Disinfo-Detection
+```
+
+### Step 2: Set Up Environment Variables
+Create a `.env` file in the root directory to store your sensitive information (API keys, project IDs, etc.).
+```bash
+touch .env
+```
+Populate the `.env` file with the following variables:
+```bash
+# .env
+WEAVIATE_URL=http://localhost:8080  # or your cloud instance URL
+GCP_PROJECT_ID=your-gcp-project-id
+GOOGLE_GENAI_API_KEY=your-google-genai-api-key
+```
+
+### Step 3: Run Weaviate with Docker
+If you're running Weaviate locally, use the following command to start Weaviate:
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -e QUERY_DEFAULTS_LIMIT=20 \
+  -e AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true \
+  -e PERSISTENCE_DATA_PATH=/var/lib/weaviate \
+  -v $(pwd)/weaviate-data:/var/lib/weaviate \
+  semitechnologies/weaviate:latest
+```
+
+### Step 4: Run the Python Script
+The Python script handles scraping, text chunking, vectorizing, and interaction with Weaviate and Google Gemini. To start the script:
+```bash
+mesop backend/app.py
+```
+
+### Step 5: Use Mesop UI
+Mesop UI provides the frontend for the chatbot. Once the Python backend is running, use Mesop's interface to interact with the system.
+
+## Team
+This project was developed as part of a team effort. The following individuals contributed to the development of this disinformation detection chatbot:
+
+- **Yiheng Yuan**
+- **Lauren Zhu**
+- **Jade Zhou**
+
+### Mentor:
+
+- **Dr. Ali Arsanjani**
