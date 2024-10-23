@@ -4,8 +4,6 @@
 Factuality factors: linguistic based, toxicity
 
 Skipping the data cleanning process
-
-Feature engineering could be directly added to Jeff's code
 """
 
 import nltk
