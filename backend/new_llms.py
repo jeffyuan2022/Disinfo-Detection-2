@@ -10,7 +10,7 @@ load_dotenv()
 GOOGLE_GENAI_API_KEY = os.getenv("GOOGLE_GENAI_API_KEY")
 
 # Gemini API setup
-genai.configure(api_key=GOOGLE_GENAI_API_KEY)
+genai.configure(api_key=)
 model = genai.GenerativeModel('gemini-1.5-flash-002')
 
 # Streamlit app
@@ -74,3 +74,8 @@ if st.button("Analyze Statement"):
             st.error("Failed to analyze factors")
     else:
         st.warning("Please enter a statement and select at least one factor to analyze.")
+
+# Biases
+# Confirmation Bias
+# Context Veracity
+# Information Utility
