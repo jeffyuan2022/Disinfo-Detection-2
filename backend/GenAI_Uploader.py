@@ -122,18 +122,40 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
   new_chat_session = model.start_chat(history=[])
   preset_prompt = (
     """
-    Analyze the provided text based on the **Biases Factuality Factor**, and give it a score from 0 to 10. Provide detailed analysis across the following three areas, with specific strengths and weaknesses for each:
+    Analyze the provided text using the following **Factuality Factors**. Each factor has three mini-factors, and each factor should be scored from 0 to 1 (2 decimal places). After the analysis, generate an overall **Final Truthfulness Score** from 0 to 1, where 0 represents 0% truth and 1 represents 100% truth. A brief explanation for each factor is required. Format your response as follows:
 
-    1. **Language Analysis** (Score out of 10): 
-    - Detect any overt or covert language biases. Is the language neutral, or does it subtly push a particular viewpoint? Highlight any loaded or suggestive phrases that might influence readers, even if factual.
+    ### **1. Biases Factuality Factor**:
+    - **Language Analysis Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of how language bias (overt or covert) is detected or absent.
+    
+    - **Tonal Analysis Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of how the tone affects the neutrality or bias of the text.
 
-    2. **Tonal Analysis** (Score out of 10): 
-    - Evaluate whether the tone of the text is neutral or if it leans disproportionately positive or negative toward certain topics or groups. Does the tone contribute to bias or provide a balanced presentation of facts?
+    - **Balanced Perspective Checks Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of whether multiple perspectives are fairly represented.
 
-    3. **Balanced Perspective Checks** (Score out of 10): 
-    - Ensure that multiple perspectives are fairly represented. Does the text offer a complete view of the topic, or does it omit vital perspectives? Highlight areas where the text could have provided a more balanced representation of opposing views.
+    ### **2. Context Veracity Factor**:
+    - **Consistency Checks Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of whether the content remains consistent or has contradictions.
 
-    For each of the three areas, clearly explain the **strengths** and **weaknesses** that contribute to your score, providing specific examples from the text. Summarize your overall impression of the text and its potential biases.
+    - **Contextual Shift Detection Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of any shifts in context that could alter the meaning of the text.
+
+    - **Setting-based Validation Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of whether the claims are valid based on the setting or situation they are presented in.
+
+    ### **3. Information Utility Factor**:
+    - **Content Value Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of whether the content provides fresh, unbiased information.
+
+    - **Cost Analysis Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of whether there are additional costs or barriers to accessing reliable information.
+
+    - **Reader Value Score**: Provide a score between 0 and 1.
+    - Explanation: Brief explanation of how useful the content is to the intended audience.
+
+    ### **Final Truthfulness Score**:
+    - Based on the above factor scores, calculate the **Final Truthfulness Score** between 0 and 1 (2 decimal places) that represents the overall truthfulness of the text chunk.
     """
   )
   full_prompt = f"{preset_prompt}\n\nText:\n{chunk}"
