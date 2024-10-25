@@ -1,4 +1,3 @@
-import base64
 import PyPDF2
 import mesop as me
 import google.generativeai as genai
@@ -6,6 +5,17 @@ from typing import List
 import os
 from io import BytesIO
 from dotenv import load_dotenv
+import pickle
+import numpy as np
+import pandas as pd
+
+# Load your predictive model
+def load_predictive_model():
+    filename = '../predictive_model/pred_model.sav'
+    model = pickle.load(open(filename, 'rb'))
+    return model
+
+predictive_model = load_predictive_model()
 
 # Load API key from environment variables
 load_dotenv()
