@@ -11,7 +11,7 @@ import pandas as pd
 
 # Load your predictive model
 def load_predictive_model():
-    filename = '../predictive_model/pred_model.sav'
+    filename = './predictive_model/pred_model.sav'
     model = pickle.load(open(filename, 'rb'))
     return model
 
@@ -73,7 +73,7 @@ def app():
       # Process PDF and display results
       analysis_results = process_pdf_and_analyze(state.file)
       for i, result in enumerate(analysis_results):
-        me.text(f"Chunk {i+1} score: {result}")
+        me.text(f"Chunk {i+1}: {result}\n")
 
 def handle_upload(event: me.UploadEvent):
   state = me.state(State)
@@ -98,7 +98,7 @@ def process_pdf_and_analyze(file: me.UploadedFile) -> List[str]:
     # Step 3.3: Combine the scores
     final_score = combine_scores(float(ai_score), predictive_score)
     
-    results.append(f"Combined Truthfulness Score: {final_score:.2f}")
+    results.append(f"{chunk} Combined Truthfulness Score: ({float(ai_score):.2f} + {predictive_score:.2f}) / 2 = {final_score:.2f}")
   
   return results
 
@@ -188,16 +188,28 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
       return "0"  # If no response, default score to 0
   except Exception as e:
     return f"Error processing chunk: {str(e)}"
+  
+import re
 
 # Extract AI score from the response text
 def extract_ai_score(response_text: str) -> float:
-    # Assuming the score is mentioned in the response text
-    # You may need to refine this regex or parsing logic based on how the score is formatted in response
-    try:
-        score_str = response_text.split("Final Truthfulness Score:")[1].strip().split()[0]
-        return float(score_str)
-    except:
-        return 0.0
+    # Use a regular expression to find the final truthfulness score in the format of a floating-point number
+    match = re.findall(r"Final Truthfulness Score\** is ([0-9]\.[0-9]+)", response_text)
+    
+    if match:
+        return float(match[0])  # Extract the score as a float
+    else:
+        return 0.0  # Return 0.0 if no score is found
+    
+# # Extract AI score from the response text
+# def extract_ai_score(response_text: str) -> float:
+#     # Assuming the score is mentioned in the response text
+#     # You may need to refine this regex or parsing logic based on how the score is formatted in response
+#     try:
+#         score_str = response_text.split("Final Truthfulness Score:")[1].strip().split()[0]
+#         return float(score_str)
+#     except:
+#         return 0.0
 
 # Combine the AI and predictive model scores
 def combine_scores(ai_score: float, predictive_score: float, weight_ai=0.5, weight_predictive=0.5) -> float:
