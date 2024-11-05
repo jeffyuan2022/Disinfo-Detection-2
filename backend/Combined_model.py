@@ -153,10 +153,7 @@ openai_api_key = os.getenv("OPENAI_APIKEY")
 # Initialize Weaviate Client
 weaviate_client = weaviate.connect_to_weaviate_cloud(
     cluster_url=wcd_url,
-    auth_credentials=weaviate.classes.init.Auth.api_key(wcd_api_key),
-    headers={
-        'X-OpenAI-Api-key': openai_api_key
-    }
+    auth_credentials=weaviate.classes.init.Auth.api_key(wcd_api_key)
 )
 
 # Define the collection schema for ArticleChunk

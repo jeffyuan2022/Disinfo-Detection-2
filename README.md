@@ -11,8 +11,8 @@ This project is a **Disinformation Detection RAG (Retrieve-Augmented Generation)
 
 ## Prerequisites
 
-- Python 3.7+
-- Docker
+- Python 3.10+
+- Weaviate Cloud Account or Docker
 - Access to the following:
   - **Weaviate** instance (local or cloud)
   - **Google Generative AI API** for Gemini
@@ -52,27 +52,29 @@ touch .env
 Populate the `.env` file with the following variables:
 ```bash
 # .env
-WEAVIATE_URL=http://localhost:8080  # or your cloud instance URL
-GCP_PROJECT_ID=your-gcp-project-id
 GOOGLE_GENAI_API_KEY=your-google-genai-api-key
+WEAVIATE_API_KEY=your-weaviate-api-key
+WEAVIATE_CLUSTER=your-cloud-instance-URL
 ```
 
-### Step 3: Run Weaviate with Docker
-If you're running Weaviate locally, use the following command to start Weaviate:
-```bash
-docker run -d \
-  -p 8080:8080 \
-  -e QUERY_DEFAULTS_LIMIT=20 \
-  -e AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true \
-  -e PERSISTENCE_DATA_PATH=/var/lib/weaviate \
-  -v $(pwd)/weaviate-data:/var/lib/weaviate \
-  semitechnologies/weaviate:latest
+### Step 3: Run Weaviate with Docker (Optional)
+If you're running Weaviate locally, please follow [**this link**](https://weaviate.io/developers/weaviate/installation/docker-compose) to setup. Then replace 
 ```
+weaviate_client = weaviate.connect_to_weaviate_cloud(
+    cluster_url=wcd_url,
+    auth_credentials=weaviate.classes.init.Auth.api_key(wcd_api_key)
+)
+``` 
+with 
+```
+client = weaviate.connect_to_local()
+``` 
+in `backend/Combined_model.py` file.
 
 ### Step 4: Run the Python Script
 The Python script handles scraping, text chunking, vectorizing, and interaction with Weaviate and Google Gemini. To start the script:
 ```bash
-mesop backend/app.py
+mesop backend/Combined_model.py
 ```
 
 ### Step 5: Use Mesop UI
