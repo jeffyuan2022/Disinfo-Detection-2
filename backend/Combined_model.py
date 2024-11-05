@@ -47,7 +47,7 @@ def load(e: me.LoadEvent):
   security_policy=me.SecurityPolicy(
     allowed_iframe_parents=["https://google.github.io"]
   ),
-  path="/uploader",
+  path="/",
 )
 def app():
   state = me.state(State)
@@ -73,34 +73,41 @@ def app():
       # Process PDF and display results
       analysis_results = process_pdf_and_analyze(state.file)
       for i, result in enumerate(analysis_results):
-        me.text(f"Chunk {i+1}: {result}\n")
+        me.text(f"Chunk {i+1}: {result}")
 
 def handle_upload(event: me.UploadEvent):
   state = me.state(State)
   state.file = event.file
 
+# Update process_pdf_and_analyze to use Weaviate for chunk storage and retrieval
 def process_pdf_and_analyze(file: me.UploadedFile) -> List[str]:
-  # Step 1: Extract text from the uploaded PDF file
-  pdf_text = extract_text_from_pdf(file)
-  
-  # Step 2: Chunk the text into smaller pieces
-  chunks = chunk_text(pdf_text)
-  
-  # Step 3: Analyze each chunk using the preset prompt and combine with predictive model score
-  results = []
-  for chunk in chunks:
-    # Step 3.1: Get the AI model's score
-    ai_score = analyze_chunk_with_gemini(chunk)
-
-    # Step 3.2: Get the predictive model's score
-    predictive_score = get_predictive_model_score(chunk)
-
-    # Step 3.3: Combine the scores
-    final_score = combine_scores(float(ai_score), predictive_score)
+    # Step 1: Extract text from the uploaded PDF file
+    pdf_text = extract_text_from_pdf(file)
     
-    results.append(f"{chunk} Combined Truthfulness Score: ({float(ai_score):.2f} + {predictive_score:.2f}) / 2 = {final_score:.2f}")
-  
-  return results
+    # Step 2: Chunk the text into smaller pieces
+    chunks = chunk_text(pdf_text)
+    
+    # Step 3: Store chunks in Weaviate
+    store_chunks_in_weaviate(weaviate_client, chunks)
+    
+    # Step 4: Retrieve chunks from Weaviate
+    stored_chunks = get_chunks_from_weaviate(weaviate_client)
+    
+    # Step 5: Analyze each chunk using the preset prompt and combine with predictive model score
+    results = []
+    for chunk in stored_chunks:
+        # Step 5.1: Get the AI model's score
+        ai_score = analyze_chunk_with_gemini(chunk)
+
+        # Step 5.2: Get the predictive model's score
+        predictive_score = get_predictive_model_score(chunk)
+
+        # Step 5.3: Combine the scores
+        final_score = combine_scores(float(ai_score), predictive_score)
+        
+        results.append(f"{chunk} Combined Truthfulness Score: ({float(ai_score):.2f} + {predictive_score:.2f}) / 2 = {final_score:.2f}")
+    
+    return results
 
 # Extract text from the uploaded PDF file
 def extract_text_from_pdf(file: me.UploadedFile) -> str:
@@ -133,6 +140,70 @@ def chunk_text(text: str, chunk_size=2000) -> List[str]:
     chunks.append(" ".join(current_chunk))
 
   return chunks
+
+## Testing for Weaviate Database
+import weaviate
+from weaviate.classes.config import Property, DataType
+import weaviate.classes.config as wvc
+
+wcd_url = os.getenv("WEAVIATE_CLUSTER")
+wcd_api_key = os.getenv("WEAVIATE_API_KEY")
+openai_api_key = os.getenv("OPENAI_APIKEY")
+
+# Initialize Weaviate Client
+weaviate_client = weaviate.connect_to_weaviate_cloud(
+    cluster_url=wcd_url,
+    auth_credentials=weaviate.classes.init.Auth.api_key(wcd_api_key),
+    headers={
+        'X-OpenAI-Api-key': openai_api_key
+    }
+)
+
+# Define the collection schema for ArticleChunk
+def create_article_chunk_schema(client):
+    # Create the ArticleChunk collection with text vectorization and generative configuration
+    client.collections.create(
+        name="ArticleChunk",
+        # vectorizer_config=wvc.Configure.Vectorizer.text2vec_openai(),
+        # generative_config=wvc.Configure.Generative.openai(),
+        properties=[
+            Property(name="text", data_type=DataType.TEXT),
+        ]
+    )
+
+# Run schema creation
+# create_article_chunk_schema(weaviate_client)
+
+from weaviate.util import generate_uuid5
+
+# Store chunked text in Weaviate using the dynamic batch context
+def store_chunks_in_weaviate(client, chunks: List[str]):
+    collection = client.collections.get("ArticleChunk")
+    
+    with collection.batch.dynamic() as batch:
+        for chunk in chunks:
+            # Generate a unique UUID for each chunk
+            obj_uuid = generate_uuid5({"text": chunk})
+            batch.add_object(
+                properties={"text": chunk},
+                uuid=obj_uuid
+            )
+
+# Retrieve chunked text from Weaviate
+def get_chunks_from_weaviate(client) -> List[str]:
+    # Get the collection for querying
+    article_chunk_collection = client.collections.get("ArticleChunk")
+    
+    # Fetch objects with a specified limit and return only the "text" property
+    response = article_chunk_collection.query.fetch_objects(
+        limit=100,  # Set limit as needed
+        return_properties=["text"]
+    )
+    
+    # Extract the "text" property from each returned object
+    chunks = [obj.properties["text"] for obj in response.objects if "text" in obj.properties]
+    return chunks
+## End of testing
 
 # Analyze chunk using Google Gemini AI
 def analyze_chunk_with_gemini(chunk: str) -> str:
@@ -200,16 +271,6 @@ def extract_ai_score(response_text: str) -> float:
         return float(match[0])  # Extract the score as a float
     else:
         return 0.0  # Return 0.0 if no score is found
-    
-# # Extract AI score from the response text
-# def extract_ai_score(response_text: str) -> float:
-#     # Assuming the score is mentioned in the response text
-#     # You may need to refine this regex or parsing logic based on how the score is formatted in response
-#     try:
-#         score_str = response_text.split("Final Truthfulness Score:")[1].strip().split()[0]
-#         return float(score_str)
-#     except:
-#         return 0.0
 
 # Combine the AI and predictive model scores
 def combine_scores(ai_score: float, predictive_score: float, weight_ai=0.5, weight_predictive=0.5) -> float:
@@ -228,7 +289,6 @@ def get_predictive_model_score(chunk_text: str) -> float:
     predictive_score = np.sum(weighted_data, axis=1)[0]
     
     return predictive_score
-
 
 import pandas as pd
 import numpy as np
@@ -254,11 +314,11 @@ from bs4 import BeautifulSoup
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # Load a pre-trained NLP model
-nltk.download('punkt', quiet=True)  # Tokenizer
-nltk.download('stopwords', quiet=True)
+# nltk.download('punkt', quiet=True)  # Tokenizer
+# nltk.download('stopwords', quiet=True)
 stop_words = set(stopwords.words('english'))
-nltk.download('averaged_perceptron_tagger')  # POS tagger
-nltk.download('wordnet')  # WordNet for lemmatization
+# nltk.download('averaged_perceptron_tagger')  # POS tagger
+# nltk.download('wordnet')  # WordNet for lemmatization
 nlp = spacy.load("en_core_web_sm")
 
 # FF: content statistic
