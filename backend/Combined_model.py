@@ -120,26 +120,55 @@ def extract_text_from_pdf(file: me.UploadedFile) -> str:
     
     return extracted_text
 
-# Chunk text into smaller parts
+# # Chunk text into smaller parts
+# def chunk_text(text: str, chunk_size=2000) -> List[str]:
+#   words = text.split()
+#   chunks = []
+#   current_chunk = []
+#   current_chunk_length = 0
+
+#   for word in words:
+#     current_chunk.append(word)
+#     current_chunk_length += len(word) + 1
+
+#     if current_chunk_length > chunk_size:
+#       chunks.append(" ".join(current_chunk))
+#       current_chunk = []
+#       current_chunk_length = 0
+
+#   if current_chunk:
+#     chunks.append(" ".join(current_chunk))
+
+#   return chunks
+
 def chunk_text(text: str, chunk_size=2000) -> List[str]:
-  words = text.split()
-  chunks = []
-  current_chunk = []
-  current_chunk_length = 0
+    from nltk.tokenize import sent_tokenize
 
-  for word in words:
-    current_chunk.append(word)
-    current_chunk_length += len(word) + 1
+    sentences = sent_tokenize(text)
+    chunks = []
+    current_chunk = []
+    current_chunk_length = 0
 
-    if current_chunk_length > chunk_size:
-      chunks.append(" ".join(current_chunk))
-      current_chunk = []
-      current_chunk_length = 0
+    for sentence in sentences:
+        sentence_length = len(sentence)
 
-  if current_chunk:
-    chunks.append(" ".join(current_chunk))
+        # Check if adding the sentence would exceed chunk size
+        if current_chunk_length + sentence_length > chunk_size:
+            # Add the current chunk to the list of chunks
+            chunks.append(" ".join(current_chunk))
+            # Reset current chunk and length
+            current_chunk = []
+            current_chunk_length = 0
 
-  return chunks
+        # Add the sentence to the current chunk
+        current_chunk.append(sentence)
+        current_chunk_length += sentence_length + 1  # Account for space
+
+    # Add any remaining sentences as the last chunk
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+
+    return chunks
 
 ## Testing for Weaviate Database
 import weaviate
@@ -168,8 +197,9 @@ def create_article_chunk_schema(client):
         ]
     )
 
-# Run schema creation
-# create_article_chunk_schema(weaviate_client)
+# Delete old schema and create new schema
+weaviate_client.collections.delete("ArticleChunk")
+create_article_chunk_schema(weaviate_client)
 
 from weaviate.util import generate_uuid5
 
@@ -204,65 +234,94 @@ def get_chunks_from_weaviate(client) -> List[str]:
 
 # Analyze chunk using Google Gemini AI
 def analyze_chunk_with_gemini(chunk: str) -> str:
-  new_chat_session = model.start_chat(history=[])
-  preset_prompt = (
-    """
-    Analyze the provided text using the following **Factuality Factors**. Each factor has three mini-factors, and each factor should be scored from 0 to 1 (2 decimal places). After the analysis, generate an overall **Final Truthfulness Score** from 0 to 1, where 0 represents 0% truth and 1 represents 100% truth. A brief explanation for each factor is required. Format your response as follows:
 
-    ### **1. Biases Factuality Factor**:
-    - **Language Analysis Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of how language bias (overt or covert) is detected or absent.
+    new_chat_session = model.start_chat(history=[])
+#   preset_prompt = (
+#     """
+#     Analyze the provided text using the following **Factuality Factors**. Each factor has three mini-factors, and each factor should be scored from 0 to 1 (2 decimal places). After the analysis, generate an overall **Final Truthfulness Score** from 0 to 1, where 0 represents 0% truth and 1 represents 100% truth. A brief explanation for each factor is required. Format your response as follows:
+
+#     ### **1. Biases Factuality Factor**:
+#     - **Language Analysis Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of how language bias (overt or covert) is detected or absent.
     
-    - **Tonal Analysis Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of how the tone affects the neutrality or bias of the text.
+#     - **Tonal Analysis Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of how the tone affects the neutrality or bias of the text.
 
-    - **Balanced Perspective Checks Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of whether multiple perspectives are fairly represented.
+#     - **Balanced Perspective Checks Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of whether multiple perspectives are fairly represented.
 
-    ### **2. Context Veracity Factor**:
-    - **Consistency Checks Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of whether the content remains consistent or has contradictions.
+#     ### **2. Context Veracity Factor**:
+#     - **Consistency Checks Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of whether the content remains consistent or has contradictions.
 
-    - **Contextual Shift Detection Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of any shifts in context that could alter the meaning of the text.
+#     - **Contextual Shift Detection Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of any shifts in context that could alter the meaning of the text.
 
-    - **Setting-based Validation Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of whether the claims are valid based on the setting or situation they are presented in.
+#     - **Setting-based Validation Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of whether the claims are valid based on the setting or situation they are presented in.
 
-    ### **3. Information Utility Factor**:
-    - **Content Value Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of whether the content provides fresh, unbiased information.
+#     ### **3. Information Utility Factor**:
+#     - **Content Value Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of whether the content provides fresh, unbiased information.
 
-    - **Cost Analysis Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of whether there are additional costs or barriers to accessing reliable information.
+#     - **Cost Analysis Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of whether there are additional costs or barriers to accessing reliable information.
 
-    - **Reader Value Score**: Provide a score between 0 and 1.
-    - Explanation: Brief explanation of how useful the content is to the intended audience.
+#     - **Reader Value Score**: Provide a score between 0 and 1.
+#     - Explanation: Brief explanation of how useful the content is to the intended audience.
 
-    ### **Final Truthfulness Score**:
-    - Based on the above factor scores, calculate the **Final Truthfulness Score** between 0 and 1 (2 decimal places) that represents the overall truthfulness of the text chunk.
-    """
-  )
-  full_prompt = f"{preset_prompt}\n\nText:\n{chunk}"
+#     ### **Final Truthfulness Score**:
+#     - Based on the above factor scores, calculate the **Final Truthfulness Score** between 0 and 1 (2 decimal places) that represents the overall truthfulness of the text chunk.
+#     """
+#   )
+    preset_prompt = (
+        """
+        1. Objective:
+        - Analyze the provided text using three Objective Functions: Language Analysis, Tonal Analysis, and Balanced Perspective Checks.
+        - In each iteration, review your previous output, identify gaps or improvements, and refine your analysis further to achieve greater depth and accuracy.
 
-  try:
-    response = new_chat_session.send_message(full_prompt)
-    output = getattr(response._result, "candidates", None)
-    if output and len(output) > 0:
-      response_text = output[0].content.parts[0].text
-      ai_score = extract_ai_score(response_text)  # Extract score from AI response
-      return ai_score
-    else:
-      return "0"  # If no response, default score to 0
-  except Exception as e:
-    return f"Error processing chunk: {str(e)}"
+        2. Instructions for Each Iteration:
+        - Iteration 1:
+            - Language Analysis: Identify overt and covert language biases. Provide examples where word choices may carry inherent biases that affect interpretation.
+            - Tonal Analysis: Assess the tone for any skew in sentiment, noting any bias towards particular topics or groups.
+            - Balanced Perspective Checks: Evaluate if multiple perspectives are represented, especially if vital perspectives are missing or underrepresented.
+            - Conclude with a preliminary truthfulness score from 0 to 1, with an explanation based on the findings for each objective function.
+        - Iteration 2:
+            - Task: Reflect on areas where the initial analysis may have missed nuances or misjudged biases. For instance:
+                - If certain biases were undetected, explain why they may have been overlooked and analyze with more detail.
+                - Re-examine tonal shifts for additional layers or subtleties.
+                - Identify specific perspectives that were overlooked in the initial check.
+            - Action: Refine the explanations and adjust scores for each objective function. Document adjustments and improvements made.
+        - Iteration 3:
+            - Objective: Conduct a final review with a focus on maximizing comprehensiveness in perspective diversity and minimizing omitted information or biases.
+            - Re-assess each objective function, improving upon gaps or omissions detected in earlier iterations.
+            - Summary: Assign final scores to each objective function, explain each, and combine these into an overall Final Truthfulness Score between 0 and 1.
+        3. Final Truthfulness Score:
+        - Based on refined scores from each iteration, calculate a final truthfulness score that reflects the overall factuality and balance of the text.
+        - Include a brief summary, highlighting how each objective function impacted the score and any final observations on the article’s objectivity and completeness.
+        """
+    )
+    full_prompt = f"{preset_prompt}\n\nText:\n{chunk}"
+
+    try:
+        response = new_chat_session.send_message(full_prompt)
+        output = getattr(response._result, "candidates", None)
+        if output and len(output) > 0:
+            response_text = output[0].content.parts[0].text
+            ai_score = extract_ai_score(response_text)  # Extract score from AI response
+            return ai_score
+        else:
+            return "0"  # If no response, default score to 0
+    except Exception as e:
+        return f"Error processing chunk: {str(e)}"
   
 import re
 
 # Extract AI score from the response text
 def extract_ai_score(response_text: str) -> float:
+    # print(response_text)
     # Use a regular expression to find the final truthfulness score in the format of a floating-point number
-    match = re.findall(r"Final Truthfulness Score\** is ([0-9]\.[0-9]+)", response_text)
+    match = re.findall(r"\**Final Truthfulness Score\:\** ([0-9]\.[0-9]+)", response_text)
     
     if match:
         return float(match[0])  # Extract the score as a float
