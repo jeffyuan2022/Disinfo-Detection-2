@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import pickle
 import numpy as np
 import pandas as pd
+import json
 
 # Load your predictive model
 def load_predictive_model():
@@ -182,7 +183,10 @@ openai_api_key = os.getenv("OPENAI_APIKEY")
 # Initialize Weaviate Client
 weaviate_client = weaviate.connect_to_weaviate_cloud(
     cluster_url=wcd_url,
-    auth_credentials=weaviate.classes.init.Auth.api_key(wcd_api_key)
+    auth_credentials=weaviate.classes.init.Auth.api_key(wcd_api_key),
+    headers = {
+        "X-OpenAI-Api-Key": openai_api_key,
+    }
 )
 
 # Define the collection schema for ArticleChunk
@@ -197,9 +201,28 @@ def create_article_chunk_schema(client):
         ]
     )
 
+# Define the collection schema for LiarPlusClaim
+def create_liar_plus_schema(client):
+    client.collections.create(
+        name="LiarPlus",
+        vectorizer_config=wvc.Configure.Vectorizer.text2vec_openai(),
+        generative_config=wvc.Configure.Generative.openai(),
+        properties=[
+            Property(name="claim", data_type=DataType.TEXT),
+            Property(name="label", data_type=DataType.TEXT),
+            Property(name="topics", data_type=DataType.TEXT),
+            Property(name="originator", data_type=DataType.TEXT),
+            Property(name="title", data_type=DataType.TEXT),
+            Property(name="party", data_type=DataType.TEXT),
+            Property(name="justification", data_type=DataType.TEXT),
+        ],
+    )
+
 # Delete old schema and create new schema
 weaviate_client.collections.delete("ArticleChunk")
+# weaviate_client.collections.delete("LiarPlus")
 create_article_chunk_schema(weaviate_client)
+# create_liar_plus_schema(weaviate_client)
 
 from weaviate.util import generate_uuid5
 
@@ -215,6 +238,66 @@ def store_chunks_in_weaviate(client, chunks: List[str]):
                 properties={"text": chunk},
                 uuid=obj_uuid
             )
+
+# Store liar plus in Weaviate using the dynamic batch context
+def store_liar_plus_in_weaviate(client, filepath):
+    collection = client.collections.get("LiarPlus")
+    
+    with collection.batch.dynamic() as batch:
+        with open(filepath, 'r') as f:
+            for line in f:
+                claim_data = json.loads(line.strip())
+
+                batch.add_object(
+                    properties={
+                        "claim": claim_data["claim"],
+                        "label": claim_data["label"],
+                        "topics": claim_data["topics"],
+                        "originator": claim_data["originator"],
+                        "title": claim_data["title"],
+                        "party": claim_data["party"],
+                        "justification": claim_data["justification"]                        
+                    },
+                    uuid=generate_uuid5(claim_data["id"])
+                )
+                failed_objs_a = collection.batch.failed_objects  # Get failed objects
+                if failed_objs_a:
+                    print(f"Number of failed objects in the first batch: {len(failed_objs_a)}")
+                    for i, failed_obj in enumerate(failed_objs_a, 1):
+                        print(f"Failed object {i}:")
+                        print(f"Error message: {failed_obj.message}")
+                else:
+                    print("All objects were successfully added.")
+
+# store_liar_plus_in_weaviate(weaviate_client, "./data/train2_jsonl.jsonl")
+
+def retrieve_and_analyze_claim(chunk_text):
+    response = weaviate_client.query.get("LiarPlus", ["claim", "label", "justification", "topics", "originator", "title", "party"]) \
+        .with_near_text({"concepts": [chunk_text]}) \
+        .with_limit(3) \
+        .do()
+    
+    # Process the results
+    results = []
+    for result in response["data"]["Get"]["LiarPlus"]:
+        claim_text = result["claim"]
+        label = result["label"]
+        justification = result["justification"]
+        confidence = 1 if label == "true" else 0  # Simplified confidence based on label
+        
+        results.append({
+            "claim": claim_text,
+            "label": label,
+            "confidence": confidence,
+            "justification": justification
+        })
+    
+    return results
+
+# Example Usage
+# chunk_text = "Sample text from a chunk in PDF"
+# similar_claims = retrieve_and_analyze_claim(chunk_text)
+# print(similar_claims)
 
 # Retrieve chunked text from Weaviate
 def get_chunks_from_weaviate(client) -> List[str]:
