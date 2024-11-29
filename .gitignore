@@ -1,2 +1,4 @@
 # .gitignore
 .env
+.DS_Store
+backend/__pycache__/GenAI_chat.cpython-310.pyc

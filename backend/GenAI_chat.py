@@ -22,8 +22,6 @@ model = genai.GenerativeModel(
   generation_config=generation_config,
 )
 
-
-
 # response = chat_session.send_message("What can you do?")
 
 # output = getattr(response._result, "candidates", None)[0].content.parts[0].text
