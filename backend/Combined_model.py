@@ -73,8 +73,8 @@ def app():
 
       # Process PDF and display results
       analysis_results = process_pdf_and_analyze(state.file)
-      for i, result in enumerate(analysis_results):
-        me.text(f"Chunk {i+1}: {result}")
+      for result in analysis_results:
+        me.text(f"{result}")
 
 def handle_upload(event: me.UploadEvent):
   state = me.state(State)
@@ -96,7 +96,7 @@ def process_pdf_and_analyze(file: me.UploadedFile) -> List[str]:
     
     # Step 5: Analyze each chunk using the preset prompt and combine with predictive model score
     results = []
-    for chunk in stored_chunks:
+    for i, chunk in enumerate(stored_chunks):
         # Step 5.1: Get the AI model's score
         ai_score = analyze_chunk_with_gemini(chunk)
 
@@ -106,7 +106,9 @@ def process_pdf_and_analyze(file: me.UploadedFile) -> List[str]:
         # Step 5.3: Combine the scores
         final_score = combine_scores(float(ai_score), predictive_score)
         
-        results.append(f"{chunk} Combined Truthfulness Score: ({float(ai_score):.2f} + {predictive_score:.2f}) / 2 = {final_score:.2f}")
+        results.append(f"Chunk {i+1}: {chunk}")
+        results.append(f"Combined Truthfulness Score: ({float(ai_score):.2f} + {predictive_score:.2f}) / 2 = {final_score:.2f}")
+        results.append("")
     
     return results
 
@@ -317,46 +319,16 @@ def get_chunks_from_weaviate(client) -> List[str]:
 
 # Analyze chunk using Google Gemini AI
 def analyze_chunk_with_gemini(chunk: str) -> str:
-
-    new_chat_session = model.start_chat(history=[])
-#   preset_prompt = (
-#     """
-#     Analyze the provided text using the following **Factuality Factors**. Each factor has three mini-factors, and each factor should be scored from 0 to 1 (2 decimal places). After the analysis, generate an overall **Final Truthfulness Score** from 0 to 1, where 0 represents 0% truth and 1 represents 100% truth. A brief explanation for each factor is required. Format your response as follows:
-
-#     ### **1. Biases Factuality Factor**:
-#     - **Language Analysis Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of how language bias (overt or covert) is detected or absent.
+    # Attempt to load Gemini system prompt from the text file
+    try:
+        with open('backend/gemini_system_prompt.txt', 'r', encoding='utf-8') as file:
+            gemini_system_prompt = file.read()
+    except FileNotFoundError:
+        print("Error: gemini_system_prompt.txt not found. Please ensure the file is in the correct directory.")
+        # Return a default score of 0 for missing system prompt
+        return "Error: System prompt missing"
     
-#     - **Tonal Analysis Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of how the tone affects the neutrality or bias of the text.
-
-#     - **Balanced Perspective Checks Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of whether multiple perspectives are fairly represented.
-
-#     ### **2. Context Veracity Factor**:
-#     - **Consistency Checks Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of whether the content remains consistent or has contradictions.
-
-#     - **Contextual Shift Detection Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of any shifts in context that could alter the meaning of the text.
-
-#     - **Setting-based Validation Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of whether the claims are valid based on the setting or situation they are presented in.
-
-#     ### **3. Information Utility Factor**:
-#     - **Content Value Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of whether the content provides fresh, unbiased information.
-
-#     - **Cost Analysis Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of whether there are additional costs or barriers to accessing reliable information.
-
-#     - **Reader Value Score**: Provide a score between 0 and 1.
-#     - Explanation: Brief explanation of how useful the content is to the intended audience.
-
-#     ### **Final Truthfulness Score**:
-#     - Based on the above factor scores, calculate the **Final Truthfulness Score** between 0 and 1 (2 decimal places) that represents the overall truthfulness of the text chunk.
-#     """
-#   )
+    # Additional task-specific instructions
     preset_prompt = (
         """
         1. Objective:
@@ -384,7 +356,12 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
         - Include a brief summary, highlighting how each objective function impacted the score and any final observations on the article’s objectivity and completeness.
         """
     )
-    full_prompt = f"{preset_prompt}\n\nText:\n{chunk}"
+
+    # Combine the system prompt and preset prompt
+    full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}"
+
+    # Start a new Gemini chat session
+    new_chat_session = model.start_chat(history=[])
 
     try:
         response = new_chat_session.send_message(full_prompt)
@@ -396,7 +373,9 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
         else:
             return "0"  # If no response, default score to 0
     except Exception as e:
-        return f"Error processing chunk: {str(e)}"
+        print(f"Error processing chunk: {str(e)}")
+        # Return a default error string or numeric score
+        return "Error: Processing failed"
   
 import re
 
