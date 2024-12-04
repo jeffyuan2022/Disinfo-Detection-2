@@ -12,7 +12,7 @@ import json
 
 # Load your predictive model
 def load_predictive_model():
-    filename = './predictive_model/pred_model.sav'
+    filename = 'src/data/processed/pred_model.sav'
     model = pickle.load(open(filename, 'rb'))
     return model
 
@@ -180,15 +180,11 @@ import weaviate.classes.config as wvc
 
 wcd_url = os.getenv("WEAVIATE_CLUSTER")
 wcd_api_key = os.getenv("WEAVIATE_API_KEY")
-openai_api_key = os.getenv("OPENAI_APIKEY")
 
 # Initialize Weaviate Client
 weaviate_client = weaviate.connect_to_weaviate_cloud(
     cluster_url=wcd_url,
     auth_credentials=weaviate.classes.init.Auth.api_key(wcd_api_key),
-    headers = {
-        "X-OpenAI-Api-Key": openai_api_key,
-    }
 )
 
 # Define the collection schema for ArticleChunk
@@ -221,10 +217,30 @@ def create_liar_plus_schema(client):
     )
 
 # Delete old schema and create new schema
-weaviate_client.collections.delete("ArticleChunk")
+# weaviate_client.collections.delete("ArticleChunk")
 # weaviate_client.collections.delete("LiarPlus")
-create_article_chunk_schema(weaviate_client)
+# create_article_chunk_schema(weaviate_client)
 # create_liar_plus_schema(weaviate_client)
+
+"""
+Check if the 'ArticleChunk' cluster exists in Weaviate Cloud.
+If it exists, delete it and recreate it.
+If it does not exist, create it.
+"""
+try:
+    # Check if the cluster exists
+    response = weaviate_client.collections.list_all()
+    if "ArticleChunk" in response:
+        weaviate_client.collections.delete("ArticleChunk")
+        print("Old Cluster deleted.")
+
+    # Create the cluster
+    print("Creating the 'ArticleChunk' cluster...")
+    create_article_chunk_schema(weaviate_client)
+    print("Cluster 'ArticleChunk' initialized successfully.")
+
+except Exception as e:
+    print(f"An error occurred while initializing the 'ArticleChunk' cluster: {e}")
 
 from weaviate.util import generate_uuid5
 
@@ -317,64 +333,253 @@ def get_chunks_from_weaviate(client) -> List[str]:
     return chunks
 ## End of testing
 
+import requests
+
+def context_cross_check(claims: list, max_results: int = 3) -> dict:
+    """
+    Cross-check claims using a single SerpApi call, limiting results for efficiency.
+    
+    Parameters:
+        claims (list): List of claims to verify.
+        max_results (int): Maximum number of results to retrieve for each claim.
+    
+    Returns:
+        dict: Results with claims as keys and verification status as values.
+    """
+    serpapi_api_key = os.getenv("SERPAPI_API_KEY")
+    search_url = "https://serpapi.com/search"  # SerpApi endpoint
+
+    # Combine all claims into a single query
+    combined_query = " OR ".join(claims) # Use "OR" to search for multiple claims in one query
+    
+    try:
+        # Perform a single API request for the combined query
+        params = {
+            "q": combined_query,
+            "engine": "google",
+            "api_key": serpapi_api_key,
+            "num": max_results  # Limit results to top `max_results`
+        }
+        response = requests.get(search_url, params=params)
+        response.raise_for_status()
+        search_results = response.json()
+        # Parse the search results
+        results = {}
+        if "organic_results" in search_results:
+            for claim in claims:
+                # Check if any of the top results mention the claim
+                matched_results = [
+                    result for result in search_results["organic_results"] 
+                    if claim.lower() in result.get("title", "").lower() or 
+                       claim.lower() in result.get("snippet", "").lower()
+                ]
+                results[claim] = "Verified" if matched_results else "Not Verified"
+        else:
+            # No results found
+            results = {claim: "No Data" for claim in claims}
+        
+    except Exception as e:
+        # Handle errors gracefully
+        results = {claim: f"Error: {str(e)}" for claim in claims}
+    
+    return results
+
+# A helper function to extract key claims
+def key_claim_extraction(chunk: str) -> list:
+    """
+    Extracts key claims from the provided text chunk and filters irrelevant content.
+    Returns a list of meaningful sentences or claims.
+    """
+    # Split the chunk into sentences using punctuation
+    claims = re.split(r'[.?!]\s*', chunk)
+    
+    # Filter claims based on criteria
+    filtered_claims = []
+    for claim in claims:
+        claim = claim.strip()
+        # Skip claims that are too short or consist mainly of numbers/symbols
+        if len(claim) < 16:  # Minimum length for a valid claim
+            continue
+        if re.match(r'^[\d%.,\s]+$', claim):  # Exclude claims with only numbers or symbols
+            continue
+        if not any(c.isalpha() for c in claim):  # Ensure the claim has alphabetic characters
+            continue
+        filtered_claims.append(claim)
+    
+    return filtered_claims
+
+def evaluate_consistency(chunk: str) -> str:
+    # A placeholder implementation for consistency checks
+    return f"Evaluating consistency within the chunk: {chunk}"
+
+# Analyze the chunk using helper functions
+def analyze_with_helper_functions(chunk: str) -> dict:
+    """Analyze the chunk using helper functions."""
+    # Extract key claims
+    claims = key_claim_extraction(chunk)
+
+    # Cross-check claims using the optimized context_cross_check function
+    cross_check_results = context_cross_check(claims, max_results=3)
+
+    # Evaluate consistency in the chunk
+    consistency_results = evaluate_consistency(chunk)
+
+    # Combine outputs into a dictionary
+    return {
+        "claims": claims,
+        "cross_check_results": cross_check_results,
+        "consistency_results": consistency_results,
+    }
+
+def iterative_analysis(chunk: str, full_prompt: str, new_chat_session, max_iterations: int = 3) -> dict:
+    iteration_results = []
+    helper_outputs = analyze_with_helper_functions(chunk)  # Call helper functions initially
+    
+    for i in range(max_iterations):
+        prompt = f"{full_prompt}\n\n### Iteration {i+1}:\nAnalyze the text below.\n\n{chunk}\n"
+        if i > 0:
+            prompt += f"\nPrevious Analysis:\n{iteration_results[-1]}\n\nRefine your analysis based on the above."
+        prompt += f"\nHelper Function Outputs:\n{helper_outputs}\n\n"
+
+        try:
+            response = new_chat_session.send_message(prompt)
+            output = getattr(response._result, "candidates", None)
+            if output and len(output) > 0:
+                response_text = output[0].content.parts[0].text
+                iteration_results.append(response_text)
+            else:
+                iteration_results.append("Error: No response.")
+        except Exception as e:
+            iteration_results.append(f"Error: {str(e)}")
+    return iteration_results
+
 # Analyze chunk using Google Gemini AI
 def analyze_chunk_with_gemini(chunk: str) -> str:
     # Attempt to load Gemini system prompt from the text file
     try:
-        with open('backend/gemini_system_prompt.txt', 'r', encoding='utf-8') as file:
+        with open('src/data/processed/gemini_system_prompt.txt', 'r', encoding='utf-8') as file:
             gemini_system_prompt = file.read()
     except FileNotFoundError:
-        print("Error: gemini_system_prompt.txt not found. Please ensure the file is in the correct directory.")
-        # Return a default score of 0 for missing system prompt
+        print("Error: gemini_system_prompt.txt not found.")
         return "Error: System prompt missing"
     
     # Additional task-specific instructions
     preset_prompt = (
         """
-        1. Objective:
-        - Analyze the provided text using three Objective Functions: Language Analysis, Tonal Analysis, and Balanced Perspective Checks.
-        - In each iteration, review your previous output, identify gaps or improvements, and refine your analysis further to achieve greater depth and accuracy.
+        ### Objective:
+        Analyze the provided text using the following **Factuality Factors** and **Helper Functions** to detect disinformation or misinformation effectively. Perform iterative analysis across three iterations, refining the results in each pass.
 
-        2. Instructions for Each Iteration:
-        - Iteration 1:
-            - Language Analysis: Identify overt and covert language biases. Provide examples where word choices may carry inherent biases that affect interpretation.
-            - Tonal Analysis: Assess the tone for any skew in sentiment, noting any bias towards particular topics or groups.
-            - Balanced Perspective Checks: Evaluate if multiple perspectives are represented, especially if vital perspectives are missing or underrepresented.
-            - Conclude with a preliminary truthfulness score from 0 to 1, with an explanation based on the findings for each objective function.
-        - Iteration 2:
-            - Task: Reflect on areas where the initial analysis may have missed nuances or misjudged biases. For instance:
-                - If certain biases were undetected, explain why they may have been overlooked and analyze with more detail.
-                - Re-examine tonal shifts for additional layers or subtleties.
-                - Identify specific perspectives that were overlooked in the initial check.
-            - Action: Refine the explanations and adjust scores for each objective function. Document adjustments and improvements made.
-        - Iteration 3:
-            - Objective: Conduct a final review with a focus on maximizing comprehensiveness in perspective diversity and minimizing omitted information or biases.
-            - Re-assess each objective function, improving upon gaps or omissions detected in earlier iterations.
-            - Summary: Assign final scores to each objective function, explain each, and combine these into an overall Final Truthfulness Score between 0 and 1.
-        3. Final Truthfulness Score:
-        - Based on refined scores from each iteration, calculate a final truthfulness score that reflects the overall factuality and balance of the text.
-        - Include a brief summary, highlighting how each objective function impacted the score and any final observations on the article’s objectivity and completeness.
+        ---
+
+        ### Factuality Factors:
+        1. **Biases Factuality Factor**:
+            - **Language Analysis**: Identify overt and covert language biases. Provide examples where word choices may carry inherent biases that affect interpretation.
+            - **Tonal Analysis**: Assess the tone for any skew in sentiment, noting any bias towards particular topics or groups.
+            - **Balanced Perspective Checks**: Evaluate if multiple perspectives are represented, especially if vital perspectives are missing or underrepresented.
+
+        2. **Context Veracity Factor**:
+            - **Consistency Checks**: Determine if the text remains consistent or contains contradictions.
+            - **Contextual Shift Detection**: Detect shifts in context that could alter the meaning or interpretation of claims.
+            - **Setting-based Validation**: Verify if claims are valid given the setting or situation they are presented in.
+
+        3. **Information Utility Factor**:
+            - **Content Value**: Assess whether the content provides fresh, unbiased information.
+            - **Cost Analysis**: Evaluate whether there are additional barriers or costs to accessing reliable information.
+            - **Reader Value**: Determine the usefulness and relevance of the content to the intended audience.
+
+        ---
+
+        ### Helper Functions:
+        To enhance analysis, use the following helper functions during the process:
+        1. **key_claim_extraction**:
+            - Extract main claims or assertions from the text for focused analysis.
+            - Example Output: ["Claim 1", "Claim 2", ...]
+        2. **context_cross_check**:
+            - Validate extracted claims against reliable external data sources.
+            - Input: A list of claims and the data source (e.g., "reliable_database").
+            - Example Output: { "Claim 1": "Verified", "Claim 2": "Contradicted" }
+        3. **evaluate_consistency**:
+            - Analyze the text for internal contradictions or logical inconsistencies.
+            - Example Output: { "Consistency": "High", "Issues": ["Contradiction in paragraph 2"] }
+        4. **suggest_revisions**:
+            - Recommend ways to improve neutrality, consistency, or factuality of the text.
+            - Example Output: ["Replace biased terminology in sentence 3", "Include a counter-perspective in paragraph 4"]
+
+        ---
+
+        ### Iterative Analysis Instructions:
+        Perform analysis over **three iterations**, refining the results in each pass:
+
+        1. **Iteration 1**:
+            - Conduct a preliminary analysis using the Factuality Factors.
+            - Identify overt and covert biases, assess tone, and check for balanced perspectives.
+            - Extract key claims using `key_claim_extraction` and verify claims using `context_cross_check`.
+            - Assign preliminary scores for each factor and provide explanations for the scores.
+            - Conclude with a preliminary **Truthfulness Score** (0 to 1).
+
+        2. **Iteration 2**:
+            - Reflect on areas where the initial analysis missed nuances or misjudged factors.
+            - Refine the analysis with deeper insights:
+                - Reassess language for subtle biases or ambiguities.
+                - Explore tonal shifts for additional layers or subtleties.
+                - Check overlooked perspectives and revise the balanced perspective evaluation.
+            - Use `evaluate_consistency` and `suggest_revisions` to detect gaps and improve the analysis.
+            - Adjust scores for each factor and document improvements.
+            - Provide an updated **Truthfulness Score**.
+
+        3. **Iteration 3**:
+            - Conduct a final review focusing on comprehensiveness:
+                - Ensure diversity of perspectives is maximized.
+                - Confirm that all gaps or omissions identified in earlier iterations are addressed.
+                - Incorporate function outputs into the final analysis for accuracy and depth.
+            - Assign final scores to each factor and calculate a comprehensive **Final Truthfulness Score**.
+            - Include a summary highlighting key adjustments and final observations.
+
+        ---
+
+        ### Format for Analysis:
+        1. **Biases Factuality Factor**:
+            - **Language Analysis Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+            - **Tonal Analysis Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+            - **Balanced Perspective Checks Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+
+        2. **Context Veracity Factor**:
+            - **Consistency Checks Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+            - **Contextual Shift Detection Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+            - **Setting-based Validation Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+
+        3. **Information Utility Factor**:
+            - **Content Value Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+            - **Cost Analysis Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+            - **Reader Value Score**: [Score from 0 to 1]
+            - Explanation: [Explanation of the score]
+
+        4. **Final Truthfulness Score**:
+            - Based on refined scores, calculate a final truthfulness score (0 to 1).
+            - Provide a summary explaining the final score and key observations.
+
+        ---
         """
     )
 
-    # Combine the system prompt and preset prompt
+    # Combine system and iterative prompts
     full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}"
-
-    # Start a new Gemini chat session
     new_chat_session = model.start_chat(history=[])
 
     try:
-        response = new_chat_session.send_message(full_prompt)
-        output = getattr(response._result, "candidates", None)
-        if output and len(output) > 0:
-            response_text = output[0].content.parts[0].text
-            ai_score = extract_ai_score(response_text)  # Extract score from AI response
-            return ai_score
-        else:
-            return "0"  # If no response, default score to 0
+        # Perform iterative analysis
+        iteration_results = iterative_analysis(chunk, full_prompt, new_chat_session)
+        return extract_ai_score(iteration_results[-1])  # Return the final iteration's result
     except Exception as e:
-        print(f"Error processing chunk: {str(e)}")
-        # Return a default error string or numeric score
+        print(f"Error during analysis: {str(e)}")
         return "Error: Processing failed"
   
 import re
@@ -383,10 +588,11 @@ import re
 def extract_ai_score(response_text: str) -> float:
     # print(response_text)
     # Use a regular expression to find the final truthfulness score in the format of a floating-point number
-    match = re.findall(r"\**Final Truthfulness Score\:\** ([0-9]\.[0-9]+)", response_text)
+    match = re.findall(r"\*{0,2}Final Truthfulness Score\:\*{0,2} ([0-9]\.[0-9]+)|\*{0,2}Final Truthfulness Score\*{0,2}\: ([0-9]\.[0-9]+)", response_text)
+    result = [i for i in match[0] if len(i) > 2]
     
     if match:
-        return float(match[0])  # Extract the score as a float
+        return float(result[0])  # Extract the score as a float
     else:
         return 0.0  # Return 0.0 if no score is found
 
