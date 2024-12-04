@@ -119,5 +119,5 @@ detailed_fact_checks = scrape_all_links(politifact_data)
 detailed_fact_checks_df = pd.DataFrame(detailed_fact_checks)
 
 # Save the detailed data to a CSV file
-detailed_fact_checks_df.to_csv('detailed_fact_checks.csv', index=False, encoding="utf-8")
+detailed_fact_checks_df.to_csv('src/data/processed/detailed_fact_checks.csv', index=False, encoding="utf-8")
 print("Scraping completed and saved to 'detailed_fact_checks.csv'.")

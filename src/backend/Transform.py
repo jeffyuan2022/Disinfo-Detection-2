@@ -2,7 +2,7 @@ import pandas as pd
 import json
 
 # Load the scraped data
-scraped_data = pd.read_csv('detailed_fact_checks.csv')  # Assuming data is saved in a CSV file
+scraped_data = pd.read_csv('src/data/processed/detailed_fact_checks.csv')  # Assuming data is saved in a CSV file
 
 # Select relevant columns and rename for clarity
 relevant_data = scraped_data[['Quote', 'Subline', 'Explanation']].rename(
@@ -34,7 +34,7 @@ for example in training_data:
     system_prompt += f"**Reasoning:** {example['reasoning']}\n\n"
 
 # Save the system prompt for Gemini input
-with open('gemini_system_prompt.txt', 'w', encoding='utf-8') as output_file:
+with open('src/data/processed/gemini_system_prompt.txt', 'w', encoding='utf-8') as output_file:
     output_file.write(system_prompt)
 
 print("System prompt saved to 'gemini_system_prompt.txt'.")
