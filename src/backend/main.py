@@ -577,6 +577,7 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
     try:
         # Perform iterative analysis
         iteration_results = iterative_analysis(chunk, full_prompt, new_chat_session)
+        print(iteration_results[-1])
         return extract_ai_score(iteration_results[-1])  # Return the final iteration's result
     except Exception as e:
         print(f"Error during analysis: {str(e)}")
