@@ -39,8 +39,6 @@ model = genai.GenerativeModel(
 @me.stateclass
 class State:
   file: me.UploadedFile
-  url: str = ""
-  url_article: str = ""
 
 def load(e: me.LoadEvent):
   me.set_theme_mode("system")
@@ -56,29 +54,13 @@ def app():
   state = me.state(State)
   
   with me.box(style=me.Style(padding=me.Padding.all(15))):
-    # URL Input Section
-    me.input(
-      label="Enter Article URL",
-      placeholder="https://example.com/article",
-      on_change=handle_url_input,
-      style=me.Style(margin=me.Margin.bottom(10)),
-    )
-    me.button(
-      label="Scrape Article",
-      on_click=handle_scrape_article,
-      type="flat",
-      color="primary",
-      style=me.Style(font_weight="bold"),
-    )
-
     # PDF Uploader
     me.uploader(
       label="Upload PDF File",
       accepted_file_types=["application/pdf"],
       on_upload=handle_upload,
-      type="card",
+      type="flat",
       color="primary",
-      icon="upload",
       style=me.Style(font_weight="bold"),
     )
 
@@ -94,72 +76,9 @@ def app():
       for result in analysis_results:
         me.text(f"{result}")
 
-    # Display results for URL scraping
-    if state.url_article:
-      with me.box(style=me.Style(margin=me.Margin.all(10))):
-        me.text("Scraped Article:")
-        me.text(state.url_article)
-        analysis_results = analyze_article_text(state.url_article)
-        for result in analysis_results:
-          me.text(f"{result}")
-
 def handle_upload(event: me.UploadEvent):
   state = me.state(State)
   state.file = event.file
-
-# Store the URL entered by the user
-def handle_url_input(event: me.input):
-    state = me.state(State)
-    state.url = event.value
-
-# Scrape article from the provided URL
-def handle_scrape_article(event: me.ClickEvent):
-    state = me.state(State)
-    if state.url:
-        try:
-            # Use a scraping function to fetch the article
-            state.url_article = scrape_article_from_url(state.url)
-        except Exception as e:
-            state.url_article = f"Failed to scrape article: {e}"
-    else:
-        state.url_article = "Please enter a valid URL."
-
-# Scrape article content from the URL
-def scrape_article_from_url(url: str) -> str:
-    import requests
-    from bs4 import BeautifulSoup
-
-    response = requests.get(url)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    # Attempt to extract article content
-    article = ""
-    for paragraph in soup.find_all("p"):
-        article += paragraph.get_text() + "\n"
-
-    return article.strip()
-
-def analyze_article_text(article_text: str) -> List[str]:
-    # Step 1: Chunk the article text
-    chunks = chunk_text(article_text)
-    
-    # Step 2: Store and retrieve chunks from Weaviate
-    store_chunks_in_weaviate(weaviate_client, chunks)
-    stored_chunks = get_chunks_from_weaviate(weaviate_client)
-    
-    # Step 3: Analyze each chunk
-    results = []
-    for i, chunk in enumerate(stored_chunks):
-        ai_score = analyze_chunk_with_gemini(chunk)
-        predictive_score = get_predictive_model_score(chunk)
-        final_score = combine_scores(float(ai_score), predictive_score)
-        
-        results.append(f"Chunk {i+1}: {chunk}")
-        results.append(f"Combined Truthfulness Score: ({float(ai_score):.2f} + {predictive_score:.2f}) / 2 = {final_score:.2f}")
-        results.append("")
-    
-    return results
 
 # Update process_pdf_and_analyze to use Weaviate for chunk storage and retrieval
 def process_pdf_and_analyze(file: me.UploadedFile) -> List[str]:
