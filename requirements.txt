@@ -98,7 +98,7 @@ mypy-extensions==1.0.0
 narwhals==1.9.4
 nest-asyncio==1.6.0
 nltk==3.8.1
-numpy==1.26.4
+numpy==2.0.0
 openai==1.55.0
 ordered-set==4.1.0
 orjson==3.10.10
