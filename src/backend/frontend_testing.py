@@ -1,6 +1,8 @@
 import mesop as me
 from typing import List
 
+## test push
+
 @me.stateclass
 class State:
     file: me.UploadedFile
@@ -17,25 +19,119 @@ def load(e: me.LoadEvent):
   ),
   path="/",
 )
+
+
+def page():
+  with me.box(
+    style=me.Style(
+      background="#fff",
+      min_height="calc(100% - 48px)",
+      padding=me.Padding(bottom=16),
+    )
+  ):
+    with me.box(
+      style=me.Style(
+        width="min(720px, 100%)",
+        margin=me.Margin.symmetric(horizontal="auto"),
+        padding=me.Padding.symmetric(
+          horizontal=16,
+        ),
+      )
+    ):
+     header_text()
+     app()
+    footer()
+
+
+def header_text():
+  with me.box(
+    style=me.Style(
+      position="absolute",
+      padding=me.Padding.symmetric(vertical=45, horizontal=45),
+      width="100%",
+      background= "#e9f1fe",
+      color = "#4285F4",
+      left = 0,
+      right = 0
+    )
+  ):
+    me.text(
+      "Misinformation & Disinformation Detection",
+      style=me.Style(
+        font_size = 35,
+        font_weight=1000
+      ),
+    )
+
+def footer():
+  with me.box(
+    style=me.Style(
+      position="absolute",
+      bottom=0,
+      padding=me.Padding.symmetric(vertical=16, horizontal=16),
+      width="100%",
+      background= "#e9f1fe",
+      color = "#4285F4",
+      font_size=14,
+    )
+  ):
+    me.html(
+      "GenAI for Good 2025 DSC Capstoe Project: <a href='https://github.com/jeffyuan2022/Disinfo-Detection-2/tree/main'>Github Link</a>",
+    )
+
 def app():
   state = me.state(State)
-  with me.box(style=me.Style(padding=me.Padding.all(15))):
-    with me.box(style=me.Style(display="flex", gap=20)):
+  with me.box(style=me.Style(padding=me.Padding.all(200))):
+    with me.box(style=me.Style(display="flex", gap=10)):
+      
+      #insert image
+      me.image(
+        src="/fake_news.png",
+        alt="Fake News",
+        style=me.Style(width="100%"),
+      ),
+
       # URL Input Section
       me.input(
           label="Enter Article URL",
           placeholder="https://example.com/article",
           on_blur=handle_url_input,
           appearance="outline",
+          style=me.Style(
+            font_weight="bold",
+            font_size="25px",  
+            padding=me.Padding.symmetric(vertical=20, horizontal=20),  
+            width="100vw",  
+            max_width="220px",  
+            height="60px",  
+            text_align="center",
+            position="absolute",  
+            top="25%",  
+            left="20%",  
+            transform="translate(-50%, -50%)",  )
       )
+      
+
       me.button(
         label="Scrape Article",
         on_click=handle_scrape_article,
         type="flat",
         color="primary",
-        style=me.Style(font_weight="bold"),
+        style=me.Style(
+            font_weight="bold",
+            font_size="20px",  
+            padding=me.Padding.symmetric(vertical=20, horizontal=20),  
+            width="100vw",  
+            max_width="220px",  
+            height="60px",  
+            text_align="center",
+            position="absolute",  
+            top="27.5%",  
+            left="40%",  
+            transform="translate(-50%, -50%)",  )
       )
 
+          
       # PDF Uploader
       me.uploader(
         label="Upload PDF File",
@@ -43,7 +139,19 @@ def app():
         on_upload=handle_upload,
         type="raised",
         color="primary",
-        style=me.Style(font_weight="bold"),
+        style=me.Style(
+            font_weight="bold", 
+            font_size="20px",  
+            padding=me.Padding.symmetric(vertical=20, horizontal=20),  
+            width="100vw",  
+            max_width="220px",  
+            height="60px",  
+            text_align="center",
+            position="absolute",  
+            top="27.5%",  
+            left="60%",  
+            transform="translate(-50%, -50%)", 
+        ),
       )
 
       # If file is uploaded, show file details and process it
