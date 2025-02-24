@@ -1,4 +1,0 @@
-# .gitignore
-.env
-.DS_Store
-*.pyc
