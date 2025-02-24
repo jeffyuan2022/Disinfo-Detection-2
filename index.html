@@ -1,5 +1,107 @@
 ---
 layout: default
-title: Welcome
+title: AI-Powered Misinformation Detection
 ---
-<h1>My GitHub Pages Website</h1>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page.title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 40px;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 0.9em;
+            color: gray;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI-Powered Misinformation Detection</h1>
+            <p>Welcome! This site explores how we’re using AI to detect and combat misinformation. We combine predictive and generative models to assess the credibility of online content.</p>
+        </header>
+
+        <section>
+            <h2>What’s This All About?</h2>
+            <p>
+                Misinformation and disinformation are everywhere, making it harder to separate fact from fiction. Our project combines machine learning with generative AI 
+                to analyze news articles, rank their credibility, and provide explanations for how truthful (or misleading) they might be.
+            </p>
+        </section>
+
+        <section>
+            <h2>How Does It Work?</h2>
+            <h3>Step 1: Scraping and Storing News Content</h3>
+            <p>
+                We collect online news articles, break them into smaller chunks, and store them in a <strong>vector database</strong>. 
+                This allows us to efficiently analyze and compare pieces of text.
+            </p>
+
+            <h3>Step 2: Predictive Model - Fact Checking with Data</h3>
+            <p>
+                Using machine learning, we assess news credibility based on factors like writing style, sentiment, and linguistic structure. 
+                Our model gives each article a <strong>veracity score</strong> from 0 to 1 (completely false to fully truthful).
+            </p>
+
+            <h3>Step 3: Generative AI - Deep Language Understanding</h3>
+            <p>
+                We use <strong>Google Gemini</strong> and an advanced method called <strong>Fractal Chain of Thought (FCoT) prompting</strong>. 
+                This helps refine AI responses to ensure consistency and contextual accuracy when assessing misinformation.
+            </p>
+
+            <h3>Step 4: Bringing It All Together</h3>
+            <p>
+                The predictive model and generative AI work together to improve fact-checking. Our system is designed to be interactive, 
+                allowing users to query and explore misinformation detection results through a simple interface.
+            </p>
+        </section>
+
+        <section>
+            <h2>Why Does This Matter?</h2>
+            <p>
+                The spread of misinformation affects public trust, decision-making, and even democracy. 
+                By combining AI-driven techniques, we’re working toward a scalable, reliable system for detecting and mitigating false information.
+            </p>
+        </section>
+
+        <section>
+            <h2>What’s Next?</h2>
+            <p>
+                We’re refining our system, adding more factuality factors, and enhancing the UI for a better user experience. 
+                Stay tuned as we continue improving our approach to misinformation detection!
+            </p>
+        </section>
+
+        <footer class="footer">
+            <p>&copy; 2024 Yiheng Yuan, Luran Zhang, Jade Zhou, Dr. Ali Arsanjani</p>
+            <p>Want to learn more? <a href="https://github.com/your-repo">Check out our GitHub repository</a>!</p>
+        </footer>
+    </div>
+</body>
+</html>
