@@ -152,17 +152,30 @@ def process_pdf_and_analyze(file: me.UploadedFile):
         final_score = combine_scores(float(ai_score), predictive_score)
 
         # Step 5.5: Extract structured data for Mesop UI Table
+        # row = {
+        #     "Chunk #": i + 1,
+        #     "Language Bias": ai_analysis["Biases_Factuality_Factor"]["Language_Analysis"]["Score"],
+        #     "Tonal Bias": ai_analysis["Biases_Factuality_Factor"]["Tonal_Analysis"]["Score"],
+        #     "Balanced Perspective": ai_analysis["Biases_Factuality_Factor"]["Balanced_Perspective_Checks"]["Score"],
+        #     "Consistency": ai_analysis["Context_Veracity_Factor"]["Consistency_Checks"]["Score"],
+        #     "Context Shift": ai_analysis["Context_Veracity_Factor"]["Contextual_Shift_Detection"]["Score"],
+        #     "Setting Validation": ai_analysis["Context_Veracity_Factor"]["Setting_Based_Validation"]["Score"],
+        #     "Content Value": ai_analysis["Information_Utility_Factor"]["Content_Value"]["Score"],
+        #     "Cost Analysis": ai_analysis["Information_Utility_Factor"]["Cost_Analysis"]["Score"],
+        #     "Reader Value": ai_analysis["Information_Utility_Factor"]["Reader_Value"]["Score"],
+        #     "AI Score": ai_score,
+        #     "Predictive Score": predictive_score,
+        #     "Final Score": final_score
+        # }
+
         row = {
             "Chunk #": i + 1,
-            "Language Bias": ai_analysis["Biases_Factuality_Factor"]["Language_Analysis"]["Score"],
-            "Tonal Bias": ai_analysis["Biases_Factuality_Factor"]["Tonal_Analysis"]["Score"],
-            "Balanced Perspective": ai_analysis["Biases_Factuality_Factor"]["Balanced_Perspective_Checks"]["Score"],
-            "Consistency": ai_analysis["Context_Veracity_Factor"]["Consistency_Checks"]["Score"],
-            "Context Shift": ai_analysis["Context_Veracity_Factor"]["Contextual_Shift_Detection"]["Score"],
-            "Setting Validation": ai_analysis["Context_Veracity_Factor"]["Setting_Based_Validation"]["Score"],
-            "Content Value": ai_analysis["Information_Utility_Factor"]["Content_Value"]["Score"],
-            "Cost Analysis": ai_analysis["Information_Utility_Factor"]["Cost_Analysis"]["Score"],
-            "Reader Value": ai_analysis["Information_Utility_Factor"]["Reader_Value"]["Score"],
+            "Biases": ai_analysis["Biases_Factuality_Factor"]["Overall_Score"],
+            "Biases Consideration": ". ".join((ai_analysis["Biases_Factuality_Factor"]["Language_Analysis"]["Explanation"], ai_analysis["Biases_Factuality_Factor"]["Tonal_Analysis"]["Explanation"], ai_analysis["Biases_Factuality_Factor"]["Balanced_Perspective_Checks"]["Explanation"])),
+            "Context Veracity": ai_analysis["Context_Veracity_Factor"]["Overall_Score"],
+            "Context Veracity Consideration": ". ".join((ai_analysis["Context_Veracity_Factor"]["Consistency_Checks"]["Explanation"], ai_analysis["Context_Veracity_Factor"]["Contextual_Shift_Detection"]["Explanation"], ai_analysis["Context_Veracity_Factor"]["Setting_Based_Validation"]["Explanation"])),
+            "Information Utility": ai_analysis["Information_Utility_Factor"]["Overall_Score"],
+            "Information Utility Consideration": ". ".join((ai_analysis["Information_Utility_Factor"]["Content_Value"]["Explanation"], ai_analysis["Information_Utility_Factor"]["Cost_Analysis"]["Explanation"], ai_analysis["Information_Utility_Factor"]["Reader_Value"]["Explanation"])),
             "AI Score": ai_score,
             "Predictive Score": predictive_score,
             "Final Score": final_score
@@ -703,16 +716,129 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
         """
     )
 
+    # # Normal CoT
+    # preset_prompt = (
+    #     """
+    #     ### Objective:
+    #     Analyze the provided text using the following **Factuality Factors** and **Helper Functions** to detect disinformation or misinformation effectively.
+
+    #     ---
+
+    #     ### Factuality Factors:
+    #     1. **Biases Factuality Factor**:
+    #         - **Language Analysis**: Identify overt and covert language biases. Provide examples where word choices may carry inherent biases that affect interpretation.
+    #         - **Tonal Analysis**: Assess the tone for any skew in sentiment, noting any bias towards particular topics or groups.
+    #         - **Balanced Perspective Checks**: Evaluate if multiple perspectives are represented, especially if vital perspectives are missing or underrepresented.
+
+    #     2. **Context Veracity Factor**:
+    #         - **Consistency Checks**: Determine if the text remains consistent or contains contradictions.
+    #         - **Contextual Shift Detection**: Detect shifts in context that could alter the meaning or interpretation of claims.
+    #         - **Setting-based Validation**: Verify if claims are valid given the setting or situation they are presented in.
+
+    #     3. **Information Utility Factor**:
+    #         - **Content Value**: Assess whether the content provides fresh, unbiased information.
+    #         - **Cost Analysis**: Evaluate whether there are additional barriers or costs to accessing reliable information.
+    #         - **Reader Value**: Determine the usefulness and relevance of the content to the intended audience.
+
+    #     ---
+
+    #     ### Helper Functions:
+    #     To enhance analysis, use the following helper functions during the process:
+    #     1. **key_claim_extraction**:
+    #         - Extract main claims or assertions from the text for focused analysis.
+    #         - Example Output: ["Claim 1", "Claim 2", ...]
+    #     2. **context_cross_check**:
+    #         - Validate extracted claims against reliable external data sources.
+    #         - Input: A list of claims and the data source (e.g., "reliable_database").
+    #         - Example Output: { "Claim 1": "Verified", "Claim 2": "Contradicted" }
+    #     3. **evaluate_consistency**:
+    #         - Analyze the text for internal contradictions or logical inconsistencies.
+    #         - Example Output: { "Consistency": "High", "Issues": ["Contradiction in paragraph 2"] }
+    #     4. **suggest_revisions**:
+    #         - Recommend ways to improve neutrality, consistency, or factuality of the text.
+    #         - Example Output: ["Replace biased terminology in sentence 3", "Include a counter-perspective in paragraph 4"]
+
+    #     ---
+
+    #     ### Expected JSON Output:
+    #     Provide a structured JSON output following this format:
+
+    #     ```json
+    #     {
+    #         "Biases_Factuality_Factor": {
+    #             "Overall_Score": <float>,
+    #             "Language_Analysis": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             },
+    #             "Tonal_Analysis": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             },
+    #             "Balanced_Perspective_Checks": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             }
+    #         },
+    #         "Context_Veracity_Factor": {
+    #             "Overall_Score": <float>,
+    #             "Consistency_Checks": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             },
+    #             "Contextual_Shift_Detection": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             },
+    #             "Setting_Based_Validation": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             }
+    #         },
+    #         "Information_Utility_Factor": {
+    #             "Overall_Score": <float>,
+    #             "Content_Value": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             },
+    #             "Cost_Analysis": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             },
+    #             "Reader_Value": {
+    #                 "Score": <int>,
+    #                 "Explanation": "<string>"
+    #             }
+    #         },
+    #         "Overall_Score": <float>
+    #     }
+    #     ```
+
+    #     ---
+    #     """
+    # )
+
     # Combine system and iterative prompts
-    full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}"
+    # helper_outputs = analyze_with_helper_functions(chunk)
+    # full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}\nHelper Function Outputs:\n{helper_outputs}\n\n"
+    full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}\n"
     new_chat_session = model.start_chat(history=[])
+    
 
     try:
         # Perform iterative analysis
         iteration_results = iterative_analysis(chunk, full_prompt, new_chat_session)
         
+        
+        # response = new_chat_session.send_message(full_prompt)
+        # output = getattr(response._result, "candidates", None)
+        # response_text = output[0].content.parts[0].text
+        # print(response_text)
+        
         # Extract the final iteration output
         final_result = iteration_results[-1]
+
+        # final_result = response_text
 
         # Step 1: Extract JSON block using regex
         json_match = re.search(r'\{.*\}', final_result, re.DOTALL)
