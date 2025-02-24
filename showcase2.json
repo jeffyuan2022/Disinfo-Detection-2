@@ -1,0 +1,48 @@
+{
+    "Biases_Factuality_Factor": {
+      "Overall_Score": 0.8,
+      "Language_Analysis": {
+        "Score": 4,
+        "Explanation": "The language used is largely neutral and factual, reporting on a recall.  There's no overtly biased language used to promote or discredit Tesla."
+      },
+      "Tonal_Analysis": {
+        "Score": 4,
+        "Explanation": "The tone is primarily informative, reporting on a news event. There is no significant emotional slant or bias in the presentation of information."
+      },
+      "Balanced_Perspective_Checks": {
+        "Score": 3,
+        "Explanation": "While the text focuses on the recall itself, it would benefit from including potential perspectives from Tesla or consumer advocacy groups. The article could also address the frequency of Tesla recalls.    The current narrative is primarily from the NHTSA's perspective."
+      }
+    },
+    "Context_Veracity_Factor": {
+      "Overall_Score": 0.9,
+      "Consistency_Checks": {
+        "Score": 5,
+        "Explanation": "The text is internally consistent.  Information about the recall, its details, and previous recalls are presented in a coherent manner."
+      },
+      "Contextual_Shift_Detection": {
+        "Score": 5,
+        "Explanation": "There are no significant contextual shifts. The article maintains focus on the Tesla Cybertruck recall throughout."
+      },
+      "Setting_Based_Validation": {
+        "Score": 4,
+        "Explanation": "The setting is appropriate for the information. It's a news report, so the factual reporting style is suitable. However, verification of the recall details through an official NHTSA source would strengthen the context."
+      }
+    },
+    "Information_Utility_Factor": {
+      "Overall_Score": 0.7,
+      "Content_Value": {
+        "Score": 4,
+        "Explanation": "The content offers valuable information regarding a significant product recall. It provides crucial details about a potential safety hazard."
+      },
+      "Cost_Analysis": {
+        "Score": 5,
+        "Explanation": "Access to the information is free and readily available through the provided news source. There are no apparent barriers to accessing the core information."
+      },
+      "Reader_Value": {
+        "Score": 4,
+        "Explanation": "The information is highly relevant to consumers who own or are considering purchasing a Tesla Cybertruck. It also carries significance to those interested in automotive safety and recalls."
+      }
+    },
+    "Overall_Score": 0.8
+  }
