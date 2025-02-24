@@ -43,64 +43,132 @@ title: AI-Powered Misinformation Detection
 <body>
     <div class="container">
         <header>
-            <h1>AI-Powered Misinformation Detection</h1>
-            <p>Welcome! This site explores how we’re using AI to detect and combat misinformation. We combine predictive and generative models to assess the credibility of online content.</p>
+            <h1>Hybrid AI for Disinformation Detection</h1>
+            <p><strong>Authors:</strong> Yiheng Yuan, Luran Zhang, Jade Zhou, Dr. Ali Arsanjani</p>
+            <p><strong>Affiliation:</strong> Halıcıoğlu Data Science Institute, University of California, San Diego</p>
         </header>
 
         <section>
-            <h2>What’s This All About?</h2>
+            <h2>Abstract</h2>
             <p>
-                Misinformation and disinformation are everywhere, making it harder to separate fact from fiction. Our project combines machine learning with generative AI 
-                to analyze news articles, rank their credibility, and provide explanations for how truthful (or misleading) they might be.
+                The spread of misinformation threatens public trust and informed decision-making. Our project aims to 
+                combat this issue using a hybrid AI system that combines predictive and generative models to detect, 
+                rank, and mitigate false content in news articles. 
+            </p>
+            <p>
+                Using the <strong>LIAR-PLUS dataset</strong> and an evolving set of <strong>Factuality Factors</strong>, 
+                we develop an AI pipeline that assigns veracity scores through machine learning and refines assessments using 
+                <strong>Fractal Chain of Thought (FCoT)</strong> prompting. Key innovations include:
+            </p>
+            <ul>
+                <li>Advanced web scraping with real-time search validation</li>
+                <li>Vector database storage for efficient retrieval</li>
+                <li>Hybrid AI combining structured analysis with generative reasoning</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Introduction</h2>
+            <p>
+                The internet has made information more accessible than ever, but it has also amplified misinformation and 
+                disinformation. While misinformation is the unintentional spread of false information, disinformation is 
+                deliberately misleading content. Both erode public trust and distort understanding of critical issues.
+            </p>
+            <p>
+                To address this, we developed an AI-powered misinformation detection system. Our approach integrates a 
+                predictive machine learning model with a generative AI model to evaluate online content with greater 
+                accuracy and contextual understanding.
             </p>
         </section>
 
         <section>
-            <h2>How Does It Work?</h2>
-            <h3>Step 1: Scraping and Storing News Content</h3>
+            <h2>How It Works</h2>
+
+            <h3>Step 1: Scraping and Structuring Data</h3>
             <p>
-                We collect online news articles, break them into smaller chunks, and store them in a <strong>vector database</strong>. 
-                This allows us to efficiently analyze and compare pieces of text.
+                We scrape articles from fact-checking sites like Politifact and supplement them with search engine queries 
+                using SerpAPI. The collected text is stored in <strong>Weaviate</strong>, a vector database optimized for 
+                fast retrieval and similarity searches.
             </p>
 
-            <h3>Step 2: Predictive Model - Fact Checking with Data</h3>
+            <h3>Step 2: Predictive Model – Feature Extraction and Classification</h3>
             <p>
-                Using machine learning, we assess news credibility based on factors like writing style, sentiment, and linguistic structure. 
-                Our model gives each article a <strong>veracity score</strong> from 0 to 1 (completely false to fully truthful).
+                The predictive model assesses factuality based on structured linguistic and content-based features. 
+                We use techniques like:
+            </p>
+            <ul>
+                <li><strong>TF-IDF and CountVectorizer:</strong> Extracts key textual patterns</li>
+                <li><strong>Sentiment Analysis:</strong> Detects subjective vs. objective language</li>
+                <li><strong>Random Forest Classification:</strong> Predicts statement credibility</li>
+            </ul>
+            <p>
+                The model outputs a <strong>veracity score</strong> ranging from 0 to 1, where 1 represents the highest 
+                factual accuracy.
             </p>
 
-            <h3>Step 3: Generative AI - Deep Language Understanding</h3>
+            <h3>Step 3: Generative AI – Refining Truthfulness with Context</h3>
             <p>
-                We use <strong>Google Gemini</strong> and an advanced method called <strong>Fractal Chain of Thought (FCoT) prompting</strong>. 
-                This helps refine AI responses to ensure consistency and contextual accuracy when assessing misinformation.
+                The generative AI model (Google Gemini) evaluates statements beyond numerical patterns. It examines biases, 
+                consistency, and relevance using structured <strong>Fractal Chain of Thought (FCoT)</strong> prompting.
+            </p>
+            <p>
+                <strong>Why FCoT?</strong> Traditional AI models often generate inconsistent results across different text chunks. 
+                FCoT mitigates this by guiding the AI through iterative reasoning steps, improving response stability.
             </p>
 
-            <h3>Step 4: Bringing It All Together</h3>
+            <h3>Step 4: Hybrid Approach – Combining Both Models</h3>
             <p>
-                The predictive model and generative AI work together to improve fact-checking. Our system is designed to be interactive, 
-                allowing users to query and explore misinformation detection results through a simple interface.
+                By integrating structured predictive features with generative AI reasoning, our model achieves:
+            </p>
+            <ul>
+                <li>Higher accuracy in factuality assessments</li>
+                <li>Greater consistency across different sources</li>
+                <li>Transparency in how misinformation is detected</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Evaluation and Results</h2>
+            <p>
+                Our model performs well in distinguishing factual vs. misleading content. Notably, 
+                <strong>FCoT-based generative evaluations</strong> provide more stable truthfulness scores compared to standard 
+                AI prompting. Figures below illustrate how FCoT reduces fluctuations and aligns results with human fact-checking 
+                patterns.
+            </p>
+
+            <figure>
+                <img src="Screenshot_2024-12-04_14-17-06.png" width="100%" alt="Comparison of Truthfulness Scores">
+                <figcaption>Truthfulness score consistency between FCoT and traditional prompting.</figcaption>
+            </figure>
+        </section>
+
+        <section>
+            <h2>Challenges and Future Work</h2>
+            <p>
+                While our model demonstrates strong performance, we recognize key areas for improvement:
+            </p>
+            <ul>
+                <li>Expanding to <strong>12 Factuality Factors</strong> for deeper analysis</li>
+                <li>Refining neural networks for predictive scoring</li>
+                <li>Optimizing data retrieval through improved ranking mechanisms</li>
+                <li>Enhancing the <strong>Mesop UI</strong> for an intuitive user experience</li>
+            </ul>
+            <p>
+                We are also exploring alternatives to SerpAPI for better real-time search performance.
             </p>
         </section>
 
         <section>
-            <h2>Why Does This Matter?</h2>
+            <h2>Acknowledgments</h2>
             <p>
-                The spread of misinformation affects public trust, decision-making, and even democracy. 
-                By combining AI-driven techniques, we’re working toward a scalable, reliable system for detecting and mitigating false information.
-            </p>
-        </section>
-
-        <section>
-            <h2>What’s Next?</h2>
-            <p>
-                We’re refining our system, adding more factuality factors, and enhancing the UI for a better user experience. 
-                Stay tuned as we continue improving our approach to misinformation detection!
+                We extend our gratitude to <strong>Dr. Ali Arsanjani</strong> (Google Cloud, Applied AI Engineering) for his 
+                mentorship and guidance throughout this project.
             </p>
         </section>
 
         <footer class="footer">
             <p>&copy; 2024 Yiheng Yuan, Luran Zhang, Jade Zhou, Dr. Ali Arsanjani</p>
-            <p>Want to learn more? <a href="https://github.com/your-repo">Check out our GitHub repository</a>!</p>
+            <p><a href="https://github.com/jeffyuan2022/Disinfo-Detection-2/tree/main">Explore our GitHub repository</a></p>
         </footer>
     </div>
 </body>
