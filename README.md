@@ -1,6 +1,7 @@
 # Disinformation Detection RAG Chatbot
 
 **website link**: https://jeffyuan2022.github.io/Disinfo-Detection-2/
+
 This project is a **Disinformation Detection RAG (Retrieve-Augmented Generation) Chatbot**. It leverages **Weaviate** as a vector database for document storage, **Google Gemini** for generative AI responses, and **Mesop UI** for the frontend interface. The chatbot is designed to detect and mitigate misinformation by analyzing articles, extracting factuality factors, and generating corrective responses.
 
 ## Features
