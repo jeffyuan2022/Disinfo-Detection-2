@@ -70,19 +70,20 @@ def app():
     # If file is uploaded, show file details and process it
     if state.file and state.file.size:
         with me.box(style=me.Style(margin=me.Margin.all(10))):
-            me.text(f"**File name:** {state.file.name}")
-            me.text(f"**File size:** {state.file.size} bytes")
-            me.text(f"**File type:** {state.file.mime_type}")
+            me.text(f"File name: {state.file.name}")
+            me.text(f"File size: {state.file.size} bytes")
+            me.text(f"File type: {state.file.mime_type}")
 
         # Process PDF and store the result in the state
         results = process_pdf_and_analyze(state.file)
 
         # Convert results into a Pandas DataFrame and store in state
         if results:
-            state.analysis_results = pd.DataFrame(results)
+            state.analysis_results = pd.DataFrame([results]).transpose().reset_index()
+            state.analysis_results.columns = ["Metric", "Value"]
 
     # If analysis results exist, display them in a table
-    if not state.analysis_results.empty:
+    if state.analysis_results is not None and not state.analysis_results.empty:
         with me.box(style=me.Style(padding=me.Padding.all(10))):
             me.table(
                 state.analysis_results,
@@ -130,12 +131,25 @@ def process_pdf_and_analyze(file: me.UploadedFile):
     stored_chunks = get_chunks_from_weaviate(weaviate_client)
     
     # Step 5: Analyze each chunk using the AI model and predictive model
-    results = []
+    total_chunks = len(stored_chunks)
+    if total_chunks == 0:
+        return {"error": "No valid chunks found for analysis."}
+
+    # Initialize aggregated results
+    total_biases_score = 0.0
+    total_context_veracity_score = 0.0
+    total_info_utility_score = 0.0
+    total_ai_score = 0.0
+    total_predictive_score = 0.0
     
+    # Collect explanations for summary
+    biases_explanations = []
+    context_explanations = []
+    utility_explanations = []
+
     for i, chunk in enumerate(stored_chunks):
         # Step 5.1: Get AI model's structured JSON output
         ai_analysis = analyze_chunk_with_gemini(chunk)
-        print(ai_analysis)
         
         # Ensure it's a valid JSON-like dictionary
         if not isinstance(ai_analysis, dict):
@@ -148,42 +162,54 @@ def process_pdf_and_analyze(file: me.UploadedFile):
         # Step 5.3: Extract AI score from analysis
         ai_score = ai_analysis.get("Overall_Score", 0.0)
 
-        # Step 5.4: Combine the scores
-        final_score = combine_scores(float(ai_score), predictive_score)
+        # Step 5.4: Aggregate Scores
+        total_biases_score += ai_analysis["Biases_Factuality_Factor"]["Overall_Score"]
+        total_context_veracity_score += ai_analysis["Context_Veracity_Factor"]["Overall_Score"]
+        total_info_utility_score += ai_analysis["Information_Utility_Factor"]["Overall_Score"]
+        total_ai_score += ai_score
+        total_predictive_score += predictive_score
 
-        # Step 5.5: Extract structured data for Mesop UI Table
-        # row = {
-        #     "Chunk #": i + 1,
-        #     "Language Bias": ai_analysis["Biases_Factuality_Factor"]["Language_Analysis"]["Score"],
-        #     "Tonal Bias": ai_analysis["Biases_Factuality_Factor"]["Tonal_Analysis"]["Score"],
-        #     "Balanced Perspective": ai_analysis["Biases_Factuality_Factor"]["Balanced_Perspective_Checks"]["Score"],
-        #     "Consistency": ai_analysis["Context_Veracity_Factor"]["Consistency_Checks"]["Score"],
-        #     "Context Shift": ai_analysis["Context_Veracity_Factor"]["Contextual_Shift_Detection"]["Score"],
-        #     "Setting Validation": ai_analysis["Context_Veracity_Factor"]["Setting_Based_Validation"]["Score"],
-        #     "Content Value": ai_analysis["Information_Utility_Factor"]["Content_Value"]["Score"],
-        #     "Cost Analysis": ai_analysis["Information_Utility_Factor"]["Cost_Analysis"]["Score"],
-        #     "Reader Value": ai_analysis["Information_Utility_Factor"]["Reader_Value"]["Score"],
-        #     "AI Score": ai_score,
-        #     "Predictive Score": predictive_score,
-        #     "Final Score": final_score
-        # }
+        # Step 5.5: Collect Explanations for Summary
+        biases_explanations.append(". ".join([
+            ai_analysis["Biases_Factuality_Factor"]["Language_Analysis"]["Explanation"],
+            ai_analysis["Biases_Factuality_Factor"]["Tonal_Analysis"]["Explanation"],
+            ai_analysis["Biases_Factuality_Factor"]["Balanced_Perspective_Checks"]["Explanation"]
+        ]))
 
-        row = {
-            "Chunk #": i + 1,
-            "Biases": ai_analysis["Biases_Factuality_Factor"]["Overall_Score"],
-            "Biases Consideration": ". ".join((ai_analysis["Biases_Factuality_Factor"]["Language_Analysis"]["Explanation"], ai_analysis["Biases_Factuality_Factor"]["Tonal_Analysis"]["Explanation"], ai_analysis["Biases_Factuality_Factor"]["Balanced_Perspective_Checks"]["Explanation"])),
-            "Context Veracity": ai_analysis["Context_Veracity_Factor"]["Overall_Score"],
-            "Context Veracity Consideration": ". ".join((ai_analysis["Context_Veracity_Factor"]["Consistency_Checks"]["Explanation"], ai_analysis["Context_Veracity_Factor"]["Contextual_Shift_Detection"]["Explanation"], ai_analysis["Context_Veracity_Factor"]["Setting_Based_Validation"]["Explanation"])),
-            "Information Utility": ai_analysis["Information_Utility_Factor"]["Overall_Score"],
-            "Information Utility Consideration": ". ".join((ai_analysis["Information_Utility_Factor"]["Content_Value"]["Explanation"], ai_analysis["Information_Utility_Factor"]["Cost_Analysis"]["Explanation"], ai_analysis["Information_Utility_Factor"]["Reader_Value"]["Explanation"])),
-            "AI Score": ai_score,
-            "Predictive Score": predictive_score,
-            "Final Score": final_score
-        }
-        
-        results.append(row)
+        context_explanations.append(". ".join([
+            ai_analysis["Context_Veracity_Factor"]["Consistency_Checks"]["Explanation"],
+            ai_analysis["Context_Veracity_Factor"]["Contextual_Shift_Detection"]["Explanation"],
+            ai_analysis["Context_Veracity_Factor"]["Setting_Based_Validation"]["Explanation"]
+        ]))
 
-    return results  # Return structured data for frontend display
+        utility_explanations.append(". ".join([
+            ai_analysis["Information_Utility_Factor"]["Content_Value"]["Explanation"],
+            ai_analysis["Information_Utility_Factor"]["Cost_Analysis"]["Explanation"],
+            ai_analysis["Information_Utility_Factor"]["Reader_Value"]["Explanation"]
+        ]))
+
+    # Step 6: Compute Final Aggregated Results
+    avg_biases_score = total_biases_score / total_chunks
+    avg_context_veracity_score = total_context_veracity_score / total_chunks
+    avg_info_utility_score = total_info_utility_score / total_chunks
+    avg_ai_score = total_ai_score / total_chunks
+    avg_predictive_score = total_predictive_score / total_chunks
+    final_score = combine_scores(avg_ai_score, avg_predictive_score)
+
+    # Step 7: Create Final Report as a Single Output
+    final_report = {
+        "Overall Biases Score": avg_biases_score,
+        "Biases Consideration": " ".join(biases_explanations),
+        "Overall Context Veracity Score": avg_context_veracity_score,
+        "Context Veracity Consideration": " ".join(context_explanations),
+        "Overall Information Utility Score": avg_info_utility_score,
+        "Information Utility Consideration": " ".join(utility_explanations),
+        "AI Score": avg_ai_score,
+        "Predictive Score": avg_predictive_score,
+        "Final Score": final_score
+    }
+
+    return final_report  # Return a single aggregated analysis
 
 # Extract text from the uploaded PDF file
 def extract_text_from_pdf(file: me.UploadedFile) -> str:
@@ -716,129 +742,27 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
         """
     )
 
-    # # Normal CoT
-    # preset_prompt = (
-    #     """
-    #     ### Objective:
-    #     Analyze the provided text using the following **Factuality Factors** and **Helper Functions** to detect disinformation or misinformation effectively.
-
-    #     ---
-
-    #     ### Factuality Factors:
-    #     1. **Biases Factuality Factor**:
-    #         - **Language Analysis**: Identify overt and covert language biases. Provide examples where word choices may carry inherent biases that affect interpretation.
-    #         - **Tonal Analysis**: Assess the tone for any skew in sentiment, noting any bias towards particular topics or groups.
-    #         - **Balanced Perspective Checks**: Evaluate if multiple perspectives are represented, especially if vital perspectives are missing or underrepresented.
-
-    #     2. **Context Veracity Factor**:
-    #         - **Consistency Checks**: Determine if the text remains consistent or contains contradictions.
-    #         - **Contextual Shift Detection**: Detect shifts in context that could alter the meaning or interpretation of claims.
-    #         - **Setting-based Validation**: Verify if claims are valid given the setting or situation they are presented in.
-
-    #     3. **Information Utility Factor**:
-    #         - **Content Value**: Assess whether the content provides fresh, unbiased information.
-    #         - **Cost Analysis**: Evaluate whether there are additional barriers or costs to accessing reliable information.
-    #         - **Reader Value**: Determine the usefulness and relevance of the content to the intended audience.
-
-    #     ---
-
-    #     ### Helper Functions:
-    #     To enhance analysis, use the following helper functions during the process:
-    #     1. **key_claim_extraction**:
-    #         - Extract main claims or assertions from the text for focused analysis.
-    #         - Example Output: ["Claim 1", "Claim 2", ...]
-    #     2. **context_cross_check**:
-    #         - Validate extracted claims against reliable external data sources.
-    #         - Input: A list of claims and the data source (e.g., "reliable_database").
-    #         - Example Output: { "Claim 1": "Verified", "Claim 2": "Contradicted" }
-    #     3. **evaluate_consistency**:
-    #         - Analyze the text for internal contradictions or logical inconsistencies.
-    #         - Example Output: { "Consistency": "High", "Issues": ["Contradiction in paragraph 2"] }
-    #     4. **suggest_revisions**:
-    #         - Recommend ways to improve neutrality, consistency, or factuality of the text.
-    #         - Example Output: ["Replace biased terminology in sentence 3", "Include a counter-perspective in paragraph 4"]
-
-    #     ---
-
-    #     ### Expected JSON Output:
-    #     Provide a structured JSON output following this format:
-
-    #     ```json
-    #     {
-    #         "Biases_Factuality_Factor": {
-    #             "Overall_Score": <float>,
-    #             "Language_Analysis": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             },
-    #             "Tonal_Analysis": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             },
-    #             "Balanced_Perspective_Checks": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             }
-    #         },
-    #         "Context_Veracity_Factor": {
-    #             "Overall_Score": <float>,
-    #             "Consistency_Checks": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             },
-    #             "Contextual_Shift_Detection": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             },
-    #             "Setting_Based_Validation": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             }
-    #         },
-    #         "Information_Utility_Factor": {
-    #             "Overall_Score": <float>,
-    #             "Content_Value": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             },
-    #             "Cost_Analysis": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             },
-    #             "Reader_Value": {
-    #                 "Score": <int>,
-    #                 "Explanation": "<string>"
-    #             }
-    #         },
-    #         "Overall_Score": <float>
-    #     }
-    #     ```
-
-    #     ---
-    #     """
-    # )
-
     # Combine system and iterative prompts
-    # helper_outputs = analyze_with_helper_functions(chunk)
-    # full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}\nHelper Function Outputs:\n{helper_outputs}\n\n"
-    full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}\n"
+    # full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}\n"
+    # new_chat_session = model.start_chat(history=[])
+
+    helper_outputs = analyze_with_helper_functions(chunk)
+    full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}\nHelper Function Outputs:\n{helper_outputs}\n\n"
     new_chat_session = model.start_chat(history=[])
     
 
     try:
         # Perform iterative analysis
-        iteration_results = iterative_analysis(chunk, full_prompt, new_chat_session)
+        # iteration_results = iterative_analysis(chunk, full_prompt, new_chat_session)
         
         
-        # response = new_chat_session.send_message(full_prompt)
-        # output = getattr(response._result, "candidates", None)
-        # response_text = output[0].content.parts[0].text
-        # print(response_text)
-        
-        # Extract the final iteration output
-        final_result = iteration_results[-1]
+        response = new_chat_session.send_message(full_prompt)
+        output = getattr(response._result, "candidates", None)
+        response_text = output[0].content.parts[0].text
+        print(response_text)
 
-        # final_result = response_text
+        final_result = response_text
+        # final_result = iteration_results[-1]
 
         # Step 1: Extract JSON block using regex
         json_match = re.search(r'\{.*\}', final_result, re.DOTALL)
