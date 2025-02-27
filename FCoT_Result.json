@@ -1,0 +1,48 @@
+{
+  "Biases_Factuality_Factor": {
+    "Overall_Score": 5.0,
+    "Language_Analysis": {
+      "Score": 5,
+      "Explanation": "The language used is largely neutral and factual, reporting on a Tesla recall.  There's no overtly biased wording. However, the inclusion of market data (Dow, S&P, Nasdaq) might subtly suggest a connection between the recall and market performance, which isn't explicitly stated and could be a bias."
+    },
+    "Tonal_Analysis": {
+      "Score": 5,
+      "Explanation": "The tone is primarily neutral, reporting the facts of the recall.  There's no strong positive or negative sentiment expressed, though the repeated mention of recalls could subtly create a negative impression of the Cybertruck."
+    },
+    "Balanced_Perspective_Checks": {
+      "Score": 4,
+      "Explanation": "The text presents the information from the perspective of the NHTSA and Tesla's response.  It would benefit from including a perspective from consumer advocacy groups or independent safety experts to provide a more comprehensive view."
+    }
+  },
+  "Context_Veracity_Factor": {
+    "Overall_Score": 4.5,
+    "Consistency_Checks": {
+      "Score": 5,
+      "Explanation": "The information presented is consistent within the text. The details about the recall, the timeline of previous recalls, and the NHTSA involvement align logically."
+    },
+    "Contextual_Shift_Detection": {
+      "Score": 4,
+      "Explanation": "The inclusion of market data creates a slight contextual shift, potentially implying a connection that isn't directly supported.  While the recall is significant, directly linking it to market fluctuations requires further evidence."
+    },
+    "Setting_Based_Validation": {
+      "Score": 5,
+      "Explanation": "The setting is appropriate – a news report on a product recall.  The information aligns with the expected context of such a report."
+    }
+  },
+  "Information_Utility_Factor": {
+    "Overall_Score": 5.0,
+    "Content_Value": {
+      "Score": 5,
+      "Explanation": "The content provides valuable information about a significant recall affecting a high-profile product. The details about the safety issue and Tesla's response are newsworthy."
+    },
+    "Cost_Analysis": {
+      "Score": 5,
+      "Explanation": "The information is readily accessible via the provided source (CNN).  There are no apparent barriers to accessing this information."
+    },
+    "Reader_Value": {
+      "Score": 5,
+      "Explanation": "The information is highly relevant to consumers who own or are considering purchasing a Tesla Cybertruck, as well as those interested in automotive safety and industry news."
+    }
+  },
+  "Overall_Score": 4.83
+}

@@ -33,7 +33,7 @@ def app():
   state = me.state(State)
 
   with me.box(style=me.Style(max_width=1000, margin=me.Margin.symmetric(horizontal="auto"), padding=me.Padding.all(24), font_family="sans-serif", display="flex", flex_direction="column", min_height="100vh")):
-    me.text(text="Article Extractor", type="headline-2", style=me.Style(margin=me.Margin.all(16), color="#333"))
+    me.text(text="Article Extractor", type="headline-2")
     
     with me.box(style=me.Style(display="flex", flex_direction="column", gap=8)):
       me.input(
@@ -68,11 +68,11 @@ def app():
         me.progress_spinner(style=me.Style(margin=me.Margin.top(24)))
     
     if state.error_message:
-      with me.box(style=me.Style(background="#f8d7da", border=me.Border.all(me.BorderSide(width=1, color="#f5c6cb", style="solid")), color="#721c24", padding=me.Padding.all(12), margin=me.Margin.top(16), border_radius=4)):
+      with me.box(style=me.Style(background="#f8d7da", border=me.Border.all(me.BorderSide(width=1, color="#f5c6cb", style="solid")), color="#721c24", padding=me.Padding.all(12), border_radius=4)):
         me.text(text=f"Error: {state.error_message}", type="body-1")
     
     if state.article_title:
-      me.text(text=state.article_title, type="headline-3", style=me.Style(margin=me.Margin.top(32), color="#333"))
+      me.text(text=state.article_title, type="headline-3")
     
     if state.article_text:
       me.textarea(value=state.article_text, readonly=True, rows=20, style=me.Style(
@@ -81,7 +81,6 @@ def app():
           padding=me.Padding.all(12),
           border=me.Border.all(me.BorderSide(width=1, color="#ccc", style="solid")),
           border_radius=4,
-          margin=me.Margin.top(16),
           font_family="inherit",
           white_space="pre-wrap"
       ))
