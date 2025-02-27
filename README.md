@@ -70,7 +70,7 @@ SERPAPI_KEY=your-serpapi-key
 ### Step 4: Run the Python Script
 The Python script handles scraping, text chunking, vectorizing, and interaction with Weaviate and Google Gemini. To start the main application:
 ```bash
-mesop src/backend/testing_main.py
+mesop src/backend/FCoT_main.py
 ```
 
 ### Step 4: Use Mesop UI
@@ -82,7 +82,8 @@ Mesop UI provides the frontend for the chatbot. Once the Python backend is runni
     ├── src/                             # Main source code directory
     │   ├── backend/                     # Core backend logic
     │   │   ├── main.py                  # Old Main application file to run the project
-    │   │   ├── testing_main.py          # Updated Main application file to run the project
+    │   │   ├── FCoT_main.py             # Updated Main application file to run the project
+    │   │   ├── CoT_main.py              # Used to generate normal CoT result for comparison
     │   │   ├── frontend_testing.py      # testing frontend design
     │   │   ├── Transform.py             # Script for transforming data
     │   │   ├── web_scrape.py            # Script for web scraping
