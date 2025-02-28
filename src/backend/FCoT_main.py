@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import json
 from dataclasses import field
+import nltk
 
 # Load your predictive model
 def load_predictive_model():
@@ -824,7 +825,6 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-import nltk
 from nltk.corpus import stopwords
 from textblob import TextBlob
 import spacy
@@ -836,11 +836,11 @@ from bs4 import BeautifulSoup
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # Load a pre-trained NLP model
-# nltk.download('punkt', quiet=True)  # Tokenizer
-# nltk.download('stopwords', quiet=True)
+nltk.download('punkt', quiet=True)  # Tokenizer
+nltk.download('stopwords', quiet=True)
 stop_words = set(stopwords.words('english'))
-# nltk.download('averaged_perceptron_tagger')  # POS tagger
-# nltk.download('wordnet')  # WordNet for lemmatization
+nltk.download('averaged_perceptron_tagger')  # POS tagger
+nltk.download('wordnet')  # WordNet for lemmatization
 nlp = spacy.load("en_core_web_sm")
 
 # FF: content statistic
