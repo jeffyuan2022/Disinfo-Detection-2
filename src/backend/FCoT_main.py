@@ -77,18 +77,17 @@ def app():
 
         # Process PDF and store the result in the state
         results = process_pdf_and_analyze(state.file)
+        print(results)
 
         # Convert results into a Pandas DataFrame and store in state
         if results:
-            state.analysis_results = pd.DataFrame([results]).transpose().reset_index()
-            state.analysis_results.columns = ["Metric", "Value"]
+            state.analysis_results = pd.DataFrame([results])
 
     # If analysis results exist, display them in a table
     if state.analysis_results is not None and not state.analysis_results.empty:
         with me.box(style=me.Style(padding=me.Padding.all(10))):
             me.table(
                 state.analysis_results,
-                on_click=on_click,
                 header=me.TableHeader(sticky=True),
                 columns={col: me.TableColumn(sticky=True) for col in state.analysis_results.columns},
             )
@@ -1090,3 +1089,9 @@ def combine_feat(X):
     X_ling_tox = transform_data(X).to_numpy()
     X = np.hstack((X_content, X_auth, X_ling_tox))
     return X
+
+if __name__ == "__main__":
+    import os
+
+    port = int(os.getenv("PORT", 8080))  # Default port to 8080 if Render does not set PORT
+    me.run(port=port, host="0.0.0.0")  # Ensure the app binds to the correct host and port
