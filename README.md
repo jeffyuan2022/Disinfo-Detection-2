@@ -35,7 +35,6 @@ The project uses the following Python libraries:
 - `google-generativeai`
 - `mesop-labs`
 - `python-dotenv`
-- `langchain`
 - `pandas`
 - `numpy`
 
