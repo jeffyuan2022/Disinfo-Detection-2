@@ -1,4 +1,3 @@
-# article_extractor.py
 import requests
 from bs4 import BeautifulSoup
 from newspaper import Article

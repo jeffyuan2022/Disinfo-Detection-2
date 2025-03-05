@@ -11,6 +11,7 @@ import pandas as pd
 import json
 from dataclasses import field
 import nltk
+import article_extractor
 
 # Load your predictive model
 def load_predictive_model():
@@ -40,9 +41,15 @@ model = genai.GenerativeModel(
 
 @me.stateclass
 class State:
-    file: me.UploadedFile
+    file: me.UploadedFile = None
+    url: str = ""
+    selected_input: str = ""  # "pdf" or "url"
+    article_title: str = ""
+    article_text: str = ""
+    error_message: str = ""
+    loading: bool = False
     Final_Score: float = 0.0
-    analysis_results: pd.DataFrame = field(default_factory=pd.DataFrame)  # Fix applied
+    analysis_results: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 def load(e: me.LoadEvent):
     me.set_theme_mode("system")
@@ -55,71 +62,152 @@ def load(e: me.LoadEvent):
   path="/",
 )
 def app():
-  state = me.state(State)
-  
-  with me.box(style=me.Style(padding=me.Padding.all(15))):
-    # PDF Uploader
-    me.uploader(
-      label="Upload PDF File",
-      accepted_file_types=["application/pdf"],
-      on_upload=handle_upload,
-      type="flat",
-      color="primary",
-      style=me.Style(font_weight="bold"),
-    )
+    state = me.state(State)
 
-    # If file is uploaded, show file details and process it
-    if state.file and state.file.size:
-        with me.box(style=me.Style(margin=me.Margin.all(10))):
-            me.text(f"File name: {state.file.name}")
-            me.text(f"File size: {state.file.size} bytes")
-            me.text(f"File type: {state.file.mime_type}")
+    with me.box(style=me.Style(padding=me.Padding.all(15))):
+        
+        # PDF Uploader Section
+        me.text("Upload a PDF file for analysis", type="headline-4")
+        me.uploader(
+            label="Upload PDF File",
+            accepted_file_types=["application/pdf"],
+            on_upload=handle_upload,
+            type="flat",
+            color="primary",
+            style=me.Style(font_weight="bold"),
+            disabled=state.selected_input == "url"  # Disable if user selected URL
+        )
 
-        # Process PDF and store the result in the state
-        results = process_pdf_and_analyze(state.file)
+        if state.file and state.file.size:
+            with me.box(style=me.Style(margin=me.Margin.all(10))):
+                me.text(f"File name: {state.file.name}")
+                me.text(f"File size: {state.file.size} bytes")
+                me.text(f"File type: {state.file.mime_type}")
 
-        # Convert results into a Pandas DataFrame and store in state
-        if results:
-            state.analysis_results = pd.DataFrame([
-                ["Biases", results["Overall Biases Score"], results["Biases Consideration"]],
-                ["Context Veracity", results["Overall Context Veracity Score"], results["Context Veracity Consideration"]],
-                ["Information Utility", results["Overall Information Utility Score"], results["Information Utility Consideration"]],
-                ], columns=["Factuality Factors", "Veracity Score (1 to 6)", "Consideration"])
-            state.Final_Score = results["Final Score"]
+        # Divider
+        me.text("Or", type="headline-5")
 
-    # If analysis results exist, display them in a table
-    if state.analysis_results is not None and not state.analysis_results.empty:
-        with me.box(style=me.Style(padding=me.Padding.all(10))):
-            me.table(
-                state.analysis_results,
-                header=me.TableHeader(sticky=True),
-                columns={col: me.TableColumn(sticky=True) for col in state.analysis_results.columns},
-            )
-        me.text("Final Veracity Score (1 to 6): " + str(state.Final_Score))
+        # URL Input Section
+        me.text("Enter an article URL for analysis", type="headline-4")
+        me.input(
+            label="Enter Article URL",
+            value=state.url,
+            on_input=lambda event: select_url(event.value),
+            style=me.Style(width="100%"),
+            disabled=state.selected_input == "pdf"  # Disable if user uploaded a PDF
+        )
+
+        # Button to Start Analysis
+        me.button(
+            on_click=start_analysis,
+            label="Start Analysis",
+            disabled=not (state.file or state.url),  # Enable only if one input is provided
+            style=me.Style(
+                background="#007bff", 
+                color="white", 
+                font_size=16
+            ),
+        )
+
+        if state.loading:
+            me.progress_spinner(style=me.Style(margin=me.Margin.top(24)))
+
+        if state.error_message:
+            with me.box(style=me.Style(background="#f8d7da", padding=me.Padding.all(12))):
+                me.text(text=f"Error: {state.error_message}", type="body-1")
+
+        if state.article_title:
+            me.text(text=state.article_title, type="headline-3")
+
+        if state.article_text:
+            me.textarea(value=state.article_text, readonly=True, rows=20)
+
+        # If analysis results exist, display them
+        if state.analysis_results is not None and not state.analysis_results.empty:
+            with me.box(style=me.Style(padding=me.Padding.all(10))):
+                me.table(
+                    state.analysis_results,
+                    header=me.TableHeader(sticky=True),
+                    columns={col: me.TableColumn(sticky=True) for col in state.analysis_results.columns},
+                )
+            me.text("Final Veracity Score (1 to 6): " + str(state.Final_Score))
 
 def handle_upload(event: me.UploadEvent):
-  state = me.state(State)
-  state.file = event.file
+    """Handles PDF upload and ensures URL input is cleared."""
+    state = me.state(State)
+    
+    # If user uploads a PDF, clear URL input
+    state.url = ""
+    state.selected_input = "pdf"
+    
+    state.file = event.file
 
-import json
+def select_url(url: str):
+    """Handles URL input and ensures PDF upload is cleared."""
+    state = me.state(State)
+    
+    # If user enters a URL, clear uploaded file
+    state.file = None
+    state.selected_input = "url"
+    
+    state.url = url
 
-# Update process_pdf_and_analyze to return structured results
+def start_analysis(event=None):  # Accept event argument to avoid the error
+    """Starts analysis based on the selected input type."""
+    state = me.state(State)
+
+    if state.selected_input == "pdf" and state.file:
+        results = process_pdf_and_analyze(state.file)
+    elif state.selected_input == "url" and state.url:
+        results = extract_and_analyze_url(state.url)
+    else:
+        state.error_message = "No valid input selected for analysis."
+        return
+
+    update_analysis_results(results)
+
+def extract_and_analyze_url(url: str):
+    """Extracts article from URL and analyzes it."""
+    state = me.state(State)
+    state.loading = True
+    state.article_title = ""
+    state.article_text = ""
+    state.error_message = ""
+
+    result = article_extractor.extract_article(url)
+
+    state.loading = False
+    if result["error"]:
+        state.error_message = result["error"]
+        return None
+    else:
+        state.article_title = result["title"]
+        state.article_text = result["text"]
+        return process_text_and_analyze(state.article_text)
+
+def update_analysis_results(results):
+    """Stores the analysis results in the state."""
+    state = me.state(State)
+    if results:
+        state.analysis_results = pd.DataFrame([
+            ["Biases", results["Overall Biases Score"], results["Biases Consideration"]],
+            ["Context Veracity", results["Overall Context Veracity Score"], results["Context Veracity Consideration"]],
+            ["Information Utility", results["Overall Information Utility Score"], results["Information Utility Consideration"]],
+        ], columns=["Factuality Factors", "Veracity Score (1 to 6)", "Consideration"])
+        state.Final_Score = results["Final Score"]
+
+# Function to process PDF files
 def process_pdf_and_analyze(file: me.UploadedFile):
-    # Step 1: Extract text from the uploaded PDF file
     pdf_text = extract_text_from_pdf(file)
-    
-    # Step 2: Chunk the text into smaller pieces
-    chunks = chunk_text(pdf_text)
-    
-    # Step 3: Store chunks in Weaviate
+    return process_text_and_analyze(pdf_text)
+
+# Function to process extracted text from URL
+def process_text_and_analyze(text: str):
+    chunks = chunk_text(text)
     store_chunks_in_weaviate(weaviate_client, chunks)
-    
-    # Step 4: Retrieve chunks from Weaviate
     stored_chunks = get_chunks_from_weaviate(weaviate_client)
-    
-    # Step 5: Analyze each chunk using the AI model and predictive model
-    total_chunks = len(stored_chunks)
-    if total_chunks == 0:
+
+    if not stored_chunks:
         return {"error": "No valid chunks found for analysis."}
 
     # Initialize aggregated results
@@ -134,7 +222,9 @@ def process_pdf_and_analyze(file: me.UploadedFile):
     context_explanations = []
     utility_explanations = []
 
-    for i, chunk in enumerate(stored_chunks):
+    total_chunks = len(stored_chunks)
+
+    for chunk in stored_chunks:
         # Step 5.1: Get AI model's structured JSON output
         ai_analysis = analyze_chunk_with_gemini(chunk)
         
@@ -198,66 +288,15 @@ def process_pdf_and_analyze(file: me.UploadedFile):
 
     return final_report  # Return a single aggregated analysis
 
-# Extract text from the uploaded PDF file
 def extract_text_from_pdf(file: me.UploadedFile) -> str:
     pdf_stream = BytesIO(file.getvalue())
     reader = PyPDF2.PdfReader(pdf_stream)
-    
-    extracted_text = ""
-    for page in reader.pages:
-        extracted_text += page.extract_text()
-    
-    return extracted_text
-
-# # Chunk text into smaller parts
-# def chunk_text(text: str, chunk_size=2000) -> List[str]:
-#   words = text.split()
-#   chunks = []
-#   current_chunk = []
-#   current_chunk_length = 0
-
-#   for word in words:
-#     current_chunk.append(word)
-#     current_chunk_length += len(word) + 1
-
-#     if current_chunk_length > chunk_size:
-#       chunks.append(" ".join(current_chunk))
-#       current_chunk = []
-#       current_chunk_length = 0
-
-#   if current_chunk:
-#     chunks.append(" ".join(current_chunk))
-
-#   return chunks
+    return " ".join([page.extract_text() for page in reader.pages])
 
 def chunk_text(text: str, chunk_size=2000) -> List[str]:
     from nltk.tokenize import sent_tokenize
-
     sentences = sent_tokenize(text)
-    chunks = []
-    current_chunk = []
-    current_chunk_length = 0
-
-    for sentence in sentences:
-        sentence_length = len(sentence)
-
-        # Check if adding the sentence would exceed chunk size
-        if current_chunk_length + sentence_length > chunk_size:
-            # Add the current chunk to the list of chunks
-            chunks.append(" ".join(current_chunk))
-            # Reset current chunk and length
-            current_chunk = []
-            current_chunk_length = 0
-
-        # Add the sentence to the current chunk
-        current_chunk.append(sentence)
-        current_chunk_length += sentence_length + 1  # Account for space
-
-    # Add any remaining sentences as the last chunk
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-
-    return chunks
+    return [" ".join(sentences[i:i+chunk_size]) for i in range(0, len(sentences), chunk_size)]
 
 ## Testing for Weaviate Database
 import weaviate
