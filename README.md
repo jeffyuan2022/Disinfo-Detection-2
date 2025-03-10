@@ -69,7 +69,7 @@ SERPAPI_KEY=your-serpapi-key
 ### Step 4: Run the Python Script
 The Python script handles scraping, text chunking, vectorizing, and interaction with Weaviate and Google Gemini. To start the main application:
 ```bash
-mesop src/backend/FCoT_main.py
+mesop src/backend/main.py
 ```
 
 ### Step 4: Use Mesop UI
@@ -80,18 +80,13 @@ Mesop UI provides the frontend for the chatbot. Once the Python backend is runni
     .
     ├── src/                             # Main source code directory
     │   ├── backend/                     # Core backend logic
-    │   │   ├── main.py                  # Old Main application file to run the project
-    │   │   ├── FCoT_main.py             # Updated Main application file to run the project
-    │   │   ├── CoT_main.py              # Used to generate normal CoT result for comparison
-    │   │   ├── frontend_testing.py      # testing frontend design
+    │   │   ├── main.py                  # Main application file to run the project
     │   │   ├── Transform.py             # Script for transforming data
     │   │   ├── web_scrape.py            # Script for web scraping
+    │   │   ├── article_extractor.py     # extract article content from given URL
     │   │   └── development/             # Temporary development and testing scripts
     │   │       ├── GenAI_chat.py
     │   │       ├── GenAI_Uploader.py
-    │   │       ├── app.py               # testing frontend for URL acceptable
-    │   │       ├── app2.py              # testing frontend for UI/UX improve
-    │   │       ├── article_extractor.py # extract article content from given URL
     │   │       └── llms.py
     │   ├── data/                        # Data directory
     │   │   ├── raw/                     # Raw data files
@@ -115,6 +110,8 @@ Mesop UI provides the frontend for the chatbot. Once the Python backend is runni
     │   │   ├── ff_model.ipynb
     │   │   └── ff_score.ipynb
     ├── requirements.txt                 # Python dependencies
+    ├── DSC_Capstone_Poster.pdf          # Project Poster
+    ├── DSC_Capstone_Report.pdf          # Project Report
     ├── .env                             # Environment variables
     ├── .gitignore                       # Git ignore file
     └── README.md                        # Project overview and instructions
@@ -125,7 +122,7 @@ Mesop UI provides the frontend for the chatbot. Once the Python backend is runni
 This project was developed by:
 
 - **Yiheng Yuan**
-- **Luran Zhang**
+- **Luran Zhang** 
 - **Jade Zhou**
 
 ### Mentor:
