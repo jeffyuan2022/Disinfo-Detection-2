@@ -9,9 +9,29 @@ import pickle
 import numpy as np
 import pandas as pd
 import json
+from dataclasses import field
+import nltk
+import article_extractor
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from nltk.corpus import stopwords
+from textblob import TextBlob
+import spacy
+from collections import Counter
+import re
+import time
+from bs4 import BeautifulSoup
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from nltk.tokenize import sent_tokenize
+import weaviate
+from weaviate.classes.config import Property, DataType
+import weaviate.classes.config as wvc
+from weaviate.util import generate_uuid5
+import requests
 
 # Load your predictive model
-def load_predictive_model():
+def load_predictive_model():  
     filename = 'src/data/processed/pred_model.sav'
     model = pickle.load(open(filename, 'rb'))
     return model
@@ -38,10 +58,18 @@ model = genai.GenerativeModel(
 
 @me.stateclass
 class State:
-  file: me.UploadedFile
+    file: me.UploadedFile = None
+    url: str = ""
+    selected_input: str = ""  # "pdf" or "url"
+    article_title: str = ""
+    article_text: str = ""
+    error_message: str = ""
+    loading: bool = False
+    Final_Score: float = 0.0
+    analysis_results: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 def load(e: me.LoadEvent):
-  me.set_theme_mode("system")
+    me.set_theme_mode("system")
 
 @me.page(
   on_load=load,
@@ -51,133 +79,318 @@ def load(e: me.LoadEvent):
   path="/",
 )
 def app():
-  state = me.state(State)
-  
-  with me.box(style=me.Style(padding=me.Padding.all(15))):
-    # PDF Uploader
-    me.uploader(
-      label="Upload PDF File",
-      accepted_file_types=["application/pdf"],
-      on_upload=handle_upload,
-      type="flat",
-      color="primary",
-      style=me.Style(font_weight="bold"),
-    )
+    state = me.state(State)
 
-    # If file is uploaded, show file details and process it
-    if state.file.size:
-      with me.box(style=me.Style(margin=me.Margin.all(10))):
-        me.text(f"File name: {state.file.name}")
-        me.text(f"File size: {state.file.size}")
-        me.text(f"File type: {state.file.mime_type}")
+    with me.box(style=me.Style(padding=me.Padding.all(15))):
+        
+        # PDF Uploader Section
+        me.text("Upload a PDF file for analysis", type="headline-4")
+        me.uploader(
+            label="Upload PDF File",
+            accepted_file_types=["application/pdf"],
+            on_upload=handle_upload,
+            type="flat",
+            color="primary",
+            style=me.Style(font_weight="bold"),
+            disabled=state.selected_input == "url"  # Disable if user selected URL
+        )
 
-      # Process PDF and display results
-      analysis_results = process_pdf_and_analyze(state.file)
-      for result in analysis_results:
-        me.text(f"{result}")
+        if state.file and state.file.size:
+            with me.box(style=me.Style(margin=me.Margin.all(10))):
+                me.text(f"File name: {state.file.name}")
+                # me.text(f"File size: {state.file.size} bytes")
+                # me.text(f"File type: {state.file.mime_type}")
+
+        # Divider
+        me.text("Or", type="headline-5")
+
+        # URL Input Section
+        me.text("Enter an article URL for analysis", type="headline-4")
+        me.input(
+            label="Enter Article URL",
+            value=state.url,
+            on_input=lambda event: select_url(event.value),
+            style=me.Style(width="100%"),
+            disabled=state.selected_input == "pdf"  # Disable if user uploaded a PDF
+        )
+
+        # Buttons Section
+        with me.box(style=me.Style(margin=me.Margin.all(15))):
+            me.button(
+                on_click=start_analysis,
+                label="Start Analysis",
+                disabled=not (state.file or state.url),  # Enable only if one input is provided
+                style=me.Style(
+                    background="#007bff", 
+                    color="white", 
+                    font_size=16
+                ),
+            )
+            # New Reset Button
+            me.button(
+                on_click=reset_all,
+                label="Reset",
+                style=me.Style(
+                    background="#dc3545",
+                    color="white",
+                    font_size=16,
+                    margin=me.Margin.all(10)
+                ),
+            )
+
+        if state.loading:
+            me.progress_spinner(style=me.Style(margin=me.Margin.all(24)))
+
+        if state.error_message:
+            with me.box(style=me.Style(background="#f8d7da", padding=me.Padding.all(12))):
+                me.text(text=f"Error: {state.error_message}", type="body-1")
+
+        if state.article_title:
+            me.text(text=state.article_title, type="headline-3")
+
+        # if state.article_text:
+        #     me.textarea(value=state.article_text, readonly=True, rows=20)
+
+        # If analysis results exist, display them
+        if state.analysis_results is not None and not state.analysis_results.empty:
+            with me.box(style=me.Style(padding=me.Padding.all(10))):
+                me.table(
+                    state.analysis_results,
+                    header=me.TableHeader(sticky=True),
+                    columns={col: me.TableColumn(sticky=True) for col in state.analysis_results.columns},
+                )
+            me.text("Final Veracity Score (1 to 6): " + str(state.Final_Score))
+
+def reset_all(event=None):
+    """Resets the application state and clears data from Weaviate."""
+    state = me.state(State)
+    # Reset state variables
+    state.file = None
+    state.url = ""
+    state.selected_input = ""
+    state.article_title = ""
+    state.article_text = ""
+    state.error_message = ""
+    state.loading = False
+    state.Final_Score = 0.0
+    state.analysis_results = pd.DataFrame()
+
+    # Reset Weaviate data for ArticleChunk
+    try:
+        # Check if the collection exists and delete it
+        collections = weaviate_client.collections.list_all()
+        if "ArticleChunk" in collections:
+            weaviate_client.collections.delete("ArticleChunk")
+            print("ArticleChunk collection deleted.")
+        # Recreate the collection
+        create_article_chunk_schema(weaviate_client)
+        print("ArticleChunk collection reinitialized successfully.")
+    except Exception as e:
+        print(f"Error resetting Weaviate data: {e}")
 
 def handle_upload(event: me.UploadEvent):
-  state = me.state(State)
-  state.file = event.file
+    """Handles PDF upload and ensures URL input is cleared."""
+    state = me.state(State)
+    
+    # If user uploads a PDF, clear URL input
+    state.url = ""
+    state.selected_input = "pdf"
+    
+    state.file = event.file
 
-# Update process_pdf_and_analyze to use Weaviate for chunk storage and retrieval
-def process_pdf_and_analyze(file: me.UploadedFile) -> List[str]:
-    # Step 1: Extract text from the uploaded PDF file
+def select_url(url: str):
+    """Handles URL input and ensures PDF upload is cleared."""
+    state = me.state(State)
+    
+    # If user enters a URL, clear uploaded file
+    state.file = None
+    state.selected_input = "url"
+    
+    state.url = url
+
+def start_analysis(event=None):  # Accept event argument to avoid the error
+    """Starts analysis based on the selected input type."""
+    state = me.state(State)
+
+    if state.selected_input == "pdf" and state.file:
+        results = process_pdf_and_analyze(state.file)
+    elif state.selected_input == "url" and state.url:
+        results = extract_and_analyze_url(state.url)
+    else:
+        state.error_message = "No valid input selected for analysis."
+        return
+
+    update_analysis_results(results)
+
+def extract_and_analyze_url(url: str):
+    """Extracts article from URL and analyzes it."""
+    state = me.state(State)
+    state.loading = True
+    state.article_title = ""
+    state.article_text = ""
+    state.error_message = ""
+
+    result = article_extractor.extract_article(url)
+
+    state.loading = False
+    if result["error"]:
+        state.error_message = result["error"]
+        return None
+    else:
+        state.article_title = result["title"]
+        state.article_text = result["text"]
+        return process_text_and_analyze(state.article_text)
+
+def update_analysis_results(results):
+    """Stores the analysis results in the state."""
+    state = me.state(State)
+    if results:
+        state.analysis_results = pd.DataFrame([
+            ["Biases", results["Overall Biases Score"], results["Biases Consideration"],
+             "Google Gemini 1.5 pro with function calling and FCoT prompting"],
+            ["Context Veracity", results["Overall Context Veracity Score"], results["Context Veracity Consideration"],
+             "Google Gemini 1.5 pro with function calling and FCoT prompting"],
+            ["Information Utility", results["Overall Information Utility Score"], results["Information Utility Consideration"],
+             "Google Gemini 1.5 pro with function calling and FCoT prompting"],
+            ["Content Statistic", results["Overall Content Statistic Score"], "N/A",
+             "Predictive models trained from Liar Plus Dataset"],
+            ["Authenticity", results["Overall Authenticity Score"], "N/A",
+             "Predictive models trained from Liar Plus Dataset"],
+            ["Linguistic Based", results["Overall Linguistic Based Score"], "N/A",
+             "Predictive models trained from Liar Plus Dataset"],
+        ], columns=["Factuality Factors", "Veracity Score (1 to 6)", "Consideration", "Citation"])
+        state.Final_Score = results["Final Score"]
+
+
+# Function to process PDF files
+def process_pdf_and_analyze(file: me.UploadedFile):
     pdf_text = extract_text_from_pdf(file)
-    
-    # Step 2: Chunk the text into smaller pieces
-    chunks = chunk_text(pdf_text)
-    
-    # Step 3: Store chunks in Weaviate
-    store_chunks_in_weaviate(weaviate_client, chunks)
-    
-    # Step 4: Retrieve chunks from Weaviate
-    stored_chunks = get_chunks_from_weaviate(weaviate_client)
-    
-    # Step 5: Analyze each chunk using the preset prompt and combine with predictive model score
-    results = []
-    for i, chunk in enumerate(stored_chunks):
-        # Step 5.1: Get the AI model's score
-        ai_score = analyze_chunk_with_gemini(chunk)
+    return process_text_and_analyze(pdf_text)
 
-        # Step 5.2: Get the predictive model's score
+# Function to process extracted text from URL
+def process_text_and_analyze(text: str):
+    chunks = chunk_text(text)
+    store_chunks_in_weaviate(weaviate_client, chunks)
+    stored_chunks = get_chunks_from_weaviate(weaviate_client)
+
+    if not stored_chunks:
+        return {"error": "No valid chunks found for analysis."}
+
+    # Initialize aggregated results for generative and predictive factors
+    total_biases_score = 0.0
+    total_context_veracity_score = 0.0
+    total_info_utility_score = 0.0
+    total_ai_score = 0.0
+    total_predictive_score = 0.0
+
+    # New totals for additional predictive factors
+    total_content_stat_score = 0.0
+    total_authenticity_score = 0.0
+    total_linguistic_score = 0.0
+
+    # Collect explanations for summary (only for generative factors)
+    biases_explanations = []
+    context_explanations = []
+    utility_explanations = []
+
+    total_chunks = len(stored_chunks)
+
+    for i, chunk in enumerate(stored_chunks):
+        # Step 5.1: Get AI model's structured JSON output (generative analysis)
+        ai_analysis = analyze_chunk_with_gemini(chunk)
+        
+        if not isinstance(ai_analysis, dict):
+            print(f"Error processing chunk {i+1}: AI analysis output is invalid.")
+            continue  # Skip invalid results
+
+        # Step 5.2: Get predictive model's score (original predictive model)
         predictive_score = get_predictive_model_score(chunk)
 
-        # Step 5.3: Combine the scores
-        final_score = combine_scores(float(ai_score), predictive_score)
-        
-        results.append(f"Chunk {i+1}: {chunk}")
-        results.append(f"Combined Truthfulness Score: ({float(ai_score):.2f} + {predictive_score:.2f}) / 2 = {final_score:.2f}")
-        results.append("")
-    
-    return results
+        # Step 5.3: Extract AI score from analysis
+        ai_score = ai_analysis.get("Overall_Score", 0.0)
 
-# Extract text from the uploaded PDF file
+        # Step 5.4: Aggregate Generative Scores
+        total_biases_score += ai_analysis["Biases_Factuality_Factor"]["Overall_Score"]
+        total_context_veracity_score += ai_analysis["Context_Veracity_Factor"]["Overall_Score"]
+        total_info_utility_score += ai_analysis["Information_Utility_Factor"]["Overall_Score"]
+        total_ai_score += ai_score
+        total_predictive_score += predictive_score
+
+        # Step 5.5: Aggregate Predictive Factor Scores from custom functions
+        # For articles from URL/PDF, we pass default values for job title and justification.
+        content_stat_score = compute_factuality_score(chunk)
+        authenticity_score = compute_authenticity_score(chunk, "Unknown", "None", politifact_data)
+        linguistic_score = compute_linguistic_persuasion_score(chunk)
+
+        total_content_stat_score += content_stat_score
+        total_authenticity_score += authenticity_score
+        total_linguistic_score += linguistic_score
+
+        # Step 5.6: Collect Explanations for Generative Analysis Summary
+        biases_explanations.append(". ".join([
+            ai_analysis["Biases_Factuality_Factor"]["Language_Analysis"]["Explanation"],
+            ai_analysis["Biases_Factuality_Factor"]["Tonal_Analysis"]["Explanation"],
+            ai_analysis["Biases_Factuality_Factor"]["Balanced_Perspective_Checks"]["Explanation"]
+        ]))
+
+        context_explanations.append(". ".join([
+            ai_analysis["Context_Veracity_Factor"]["Consistency_Checks"]["Explanation"],
+            ai_analysis["Context_Veracity_Factor"]["Contextual_Shift_Detection"]["Explanation"],
+            ai_analysis["Context_Veracity_Factor"]["Setting_Based_Validation"]["Explanation"]
+        ]))
+
+        utility_explanations.append(". ".join([
+            ai_analysis["Information_Utility_Factor"]["Content_Value"]["Explanation"],
+            ai_analysis["Information_Utility_Factor"]["Cost_Analysis"]["Explanation"],
+            ai_analysis["Information_Utility_Factor"]["Reader_Value"]["Explanation"]
+        ]))
+
+    # Step 6: Compute Average Scores for each factor
+    avg_biases_score = total_biases_score / total_chunks
+    avg_context_veracity_score = total_context_veracity_score / total_chunks
+    avg_info_utility_score = total_info_utility_score / total_chunks
+    avg_ai_score = total_ai_score / total_chunks
+    avg_predictive_score = total_predictive_score / total_chunks
+    print("avg_predictive_score", avg_predictive_score)
+    avg_predictive_score_adj = round(min(max((avg_predictive_score * 5) + 1, 1), 6), 1)
+    print("avg_predictive_score_adj", avg_predictive_score_adj)
+    avg_content_stat_score = total_content_stat_score / total_chunks
+    avg_authenticity_score = total_authenticity_score / total_chunks
+    avg_linguistic_score = total_linguistic_score / total_chunks
+
+    # Final score: average of the six factors (adjust weights as desired)
+    final_score = round(((avg_biases_score + avg_context_veracity_score + avg_info_utility_score + 
+                   avg_predictive_score_adj) / 4), 0)
+
+    # Step 7: Create Final Report as a Single Output
+    final_report = {
+        "Overall Biases Score": avg_biases_score,
+        "Biases Consideration": " ".join(biases_explanations),
+        "Overall Context Veracity Score": avg_context_veracity_score,
+        "Context Veracity Consideration": " ".join(context_explanations),
+        "Overall Information Utility Score": avg_info_utility_score,
+        "Information Utility Consideration": " ".join(utility_explanations),
+        "Overall Content Statistic Score": avg_content_stat_score,
+        "Content Statistic Consideration": "N/A",
+        "Overall Authenticity Score": avg_authenticity_score,
+        "Authenticity Consideration": "N/A",
+        "Overall Linguistic Based Score": avg_linguistic_score,
+        "Linguistic Based Consideration": "N/A",
+        "Final Score": final_score
+    }
+
+    return final_report  # Return a single aggregated analysis
+
 def extract_text_from_pdf(file: me.UploadedFile) -> str:
     pdf_stream = BytesIO(file.getvalue())
     reader = PyPDF2.PdfReader(pdf_stream)
-    
-    extracted_text = ""
-    for page in reader.pages:
-        extracted_text += page.extract_text()
-    
-    return extracted_text
-
-# # Chunk text into smaller parts
-# def chunk_text(text: str, chunk_size=2000) -> List[str]:
-#   words = text.split()
-#   chunks = []
-#   current_chunk = []
-#   current_chunk_length = 0
-
-#   for word in words:
-#     current_chunk.append(word)
-#     current_chunk_length += len(word) + 1
-
-#     if current_chunk_length > chunk_size:
-#       chunks.append(" ".join(current_chunk))
-#       current_chunk = []
-#       current_chunk_length = 0
-
-#   if current_chunk:
-#     chunks.append(" ".join(current_chunk))
-
-#   return chunks
+    return " ".join([page.extract_text() for page in reader.pages])
 
 def chunk_text(text: str, chunk_size=2000) -> List[str]:
-    from nltk.tokenize import sent_tokenize
-
     sentences = sent_tokenize(text)
-    chunks = []
-    current_chunk = []
-    current_chunk_length = 0
-
-    for sentence in sentences:
-        sentence_length = len(sentence)
-
-        # Check if adding the sentence would exceed chunk size
-        if current_chunk_length + sentence_length > chunk_size:
-            # Add the current chunk to the list of chunks
-            chunks.append(" ".join(current_chunk))
-            # Reset current chunk and length
-            current_chunk = []
-            current_chunk_length = 0
-
-        # Add the sentence to the current chunk
-        current_chunk.append(sentence)
-        current_chunk_length += sentence_length + 1  # Account for space
-
-    # Add any remaining sentences as the last chunk
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-
-    return chunks
+    return [" ".join(sentences[i:i+chunk_size]) for i in range(0, len(sentences), chunk_size)]
 
 ## Testing for Weaviate Database
-import weaviate
-from weaviate.classes.config import Property, DataType
-import weaviate.classes.config as wvc
-
 wcd_url = os.getenv("WEAVIATE_CLUSTER")
 wcd_api_key = os.getenv("WEAVIATE_API_KEY")
 
@@ -185,6 +398,7 @@ wcd_api_key = os.getenv("WEAVIATE_API_KEY")
 weaviate_client = weaviate.connect_to_weaviate_cloud(
     cluster_url=wcd_url,
     auth_credentials=weaviate.classes.init.Auth.api_key(wcd_api_key),
+    skip_init_checks=True
 )
 
 # Define the collection schema for ArticleChunk
@@ -241,8 +455,6 @@ try:
 
 except Exception as e:
     print(f"An error occurred while initializing the 'ArticleChunk' cluster: {e}")
-
-from weaviate.util import generate_uuid5
 
 # Store chunked text in Weaviate using the dynamic batch context
 def store_chunks_in_weaviate(client, chunks: List[str]):
@@ -332,8 +544,6 @@ def get_chunks_from_weaviate(client) -> List[str]:
     chunks = [obj.properties["text"] for obj in response.objects if "text" in obj.properties]
     return chunks
 ## End of testing
-
-import requests
 
 def context_cross_check(claims: list, max_results: int = 3) -> dict:
     """
@@ -564,8 +774,8 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
             - Conduct a preliminary analysis using the Factuality Factors.
             - Identify overt and covert biases, assess tone, and check for balanced perspectives.
             - Extract key claims using `key_claim_extraction` and verify claims using `context_cross_check`.
-            - Assign preliminary scores for each factor and provide explanations for the scores.
-            - Conclude with a preliminary **Truthfulness Score** (0 to 1).
+            - Assign **preliminary scores (1 to 6)** for each micro factor.
+            - **Calculate an overall score (1 to 6) for each Factuality Factor** based on the micro factor scores.
 
         2. **Iteration 2**:
             - Reflect on areas where the initial analysis missed nuances or misjudged factors.
@@ -574,64 +784,112 @@ def analyze_chunk_with_gemini(chunk: str) -> str:
                 - Explore tonal shifts for additional layers or subtleties.
                 - Check overlooked perspectives and revise the balanced perspective evaluation.
             - Use `evaluate_consistency` and `suggest_revisions` to detect gaps and improve the analysis.
-            - Adjust scores for each factor and document improvements.
-            - Provide an updated **Truthfulness Score**.
+            - Adjust **micro factor scores** and recalculate **overall scores**.
 
         3. **Iteration 3**:
             - Conduct a final review focusing on comprehensiveness:
                 - Ensure diversity of perspectives is maximized.
                 - Confirm that all gaps or omissions identified in earlier iterations are addressed.
                 - Incorporate function outputs into the final analysis for accuracy and depth.
-            - Assign final scores to each factor and calculate a comprehensive **Final Truthfulness Score**.
-            - Include a summary highlighting key adjustments and final observations.
+            - Assign **final micro factor scores (1 to 6) and an overall scaled score (1 to 6) for each Factuality Factor**.
 
         ---
 
-        ### Format for Analysis:
-        1. **Biases Factuality Factor**:
-            - **Language Analysis Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
-            - **Tonal Analysis Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
-            - **Balanced Perspective Checks Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
+        ### Expected JSON Output:
+        Provide a structured JSON output following this format:
 
-        2. **Context Veracity Factor**:
-            - **Consistency Checks Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
-            - **Contextual Shift Detection Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
-            - **Setting-based Validation Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
-
-        3. **Information Utility Factor**:
-            - **Content Value Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
-            - **Cost Analysis Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
-            - **Reader Value Score**: [Score from 0 to 1]
-            - Explanation: [Explanation of the score]
-
-        4. **Final Truthfulness Score**:
-            - Based on refined scores, calculate a final truthfulness score (0 to 1).
-            - Provide a summary explaining the final score and key observations.
+        ```json
+        {
+            "Biases_Factuality_Factor": {
+                "Overall_Score": <float>,
+                "Language_Analysis": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                },
+                "Tonal_Analysis": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                },
+                "Balanced_Perspective_Checks": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                }
+            },
+            "Context_Veracity_Factor": {
+                "Overall_Score": <float>,
+                "Consistency_Checks": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                },
+                "Contextual_Shift_Detection": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                },
+                "Setting_Based_Validation": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                }
+            },
+            "Information_Utility_Factor": {
+                "Overall_Score": <float>,
+                "Content_Value": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                },
+                "Cost_Analysis": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                },
+                "Reader_Value": {
+                    "Score": <int>,
+                    "Explanation": "<string>"
+                }
+            },
+            "Overall_Score": <float>
+        }
+        ```
 
         ---
         """
     )
 
     # Combine system and iterative prompts
-    full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}"
+    # full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}\n"
+    # new_chat_session = model.start_chat(history=[])
+
+    helper_outputs = analyze_with_helper_functions(chunk)
+    full_prompt = f"{gemini_system_prompt}\n\n{preset_prompt}\n\nText:\n{chunk}\nHelper Function Outputs:\n{helper_outputs}\n\n"
     new_chat_session = model.start_chat(history=[])
+    
 
     try:
         # Perform iterative analysis
-        iteration_results = iterative_analysis(chunk, full_prompt, new_chat_session)
-        print(iteration_results[-1])
-        return extract_ai_score(iteration_results[-1])  # Return the final iteration's result
+        # iteration_results = iterative_analysis(chunk, full_prompt, new_chat_session)
+        
+        
+        response = new_chat_session.send_message(full_prompt)
+        output = getattr(response._result, "candidates", None)
+        response_text = output[0].content.parts[0].text
+        print(response_text)
+
+        final_result = response_text
+        # final_result = iteration_results[-1]
+
+        # Step 1: Extract JSON block using regex
+        json_match = re.search(r'\{.*\}', final_result, re.DOTALL)
+        if not json_match:
+            raise ValueError("Failed to extract JSON from AI response.")
+
+        # Step 2: Parse JSON safely
+        analysis_json = json.loads(json_match.group(0))
+
+        return analysis_json  # Return structured dictionary
+    except json.JSONDecodeError:
+        print("Error: Failed to parse JSON. AI response might be malformed.")
+        return {"Error": "Malformed AI response"}
     except Exception as e:
-        print(f"Error during analysis: {str(e)}")
-        return "Error: Processing failed"
+        print(f"Unexpected error: {str(e)}")
+        return {"Error": "Processing failed"}
   
 import re
 
@@ -665,35 +923,14 @@ def get_predictive_model_score(chunk_text: str) -> float:
     
     return predictive_score
 
-import pandas as pd
-import numpy as np
-import pickle
 
-from sklearn.preprocessing import LabelEncoder
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
-import nltk
-from nltk.corpus import stopwords
-from textblob import TextBlob
-import spacy
-from collections import Counter
-import re
-import time
-import requests
-from bs4 import BeautifulSoup
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # Load a pre-trained NLP model
-# nltk.download('punkt', quiet=True)  # Tokenizer
-# nltk.download('stopwords', quiet=True)
+nltk.download('punkt', quiet=True)  # Tokenizer
+nltk.download('stopwords', quiet=True)
 stop_words = set(stopwords.words('english'))
-# nltk.download('averaged_perceptron_tagger')  # POS tagger
-# nltk.download('wordnet')  # WordNet for lemmatization
+nltk.download('averaged_perceptron_tagger')  # POS tagger
+nltk.download('wordnet')  # WordNet for lemmatization
 nlp = spacy.load("en_core_web_sm")
 
 # FF: content statistic
@@ -943,3 +1180,414 @@ def combine_feat(X):
     X_ling_tox = transform_data(X).to_numpy()
     X = np.hstack((X_content, X_auth, X_ling_tox))
     return X
+
+
+# FF: content statistic
+
+def structural_analysis(statement):
+    doc = nlp(statement)
+    num_sentences = len(list(doc.sents))
+    total_tokens = len([token.text for token in doc])
+    
+    # Syntactic complexity
+    avg_sentence_length = total_tokens / num_sentences if num_sentences > 0 else 0
+    tree_depth = max([token.head.i - token.i for token in doc]) if len(doc) > 0 else 0
+    
+    # Sentiment Analysis
+    sentiment = TextBlob(statement).sentiment
+    polarity = sentiment.polarity
+    subjectivity = sentiment.subjectivity
+
+    return [avg_sentence_length, tree_depth, polarity, subjectivity]
+
+def extract_graph_features(statement):
+    doc = nlp(statement)
+    pos_counts = Counter([token.pos_ for token in doc])
+    entities = Counter([ent.label_ for ent in doc.ents])
+    
+    # part of speech tagging
+    pos_noun = pos_counts.get("NOUN", 0)
+    pos_verb = pos_counts.get("VERB", 0)
+    pos_adjective = pos_counts.get("ADJ", 0)
+    
+    # named entity recognition
+    num_persons = entities.get("PERSON", 0)
+    num_orgs = entities.get("ORG", 0)
+    num_gpes = entities.get("GPE", 0)
+    
+    return [pos_noun, pos_verb, pos_adjective, num_persons, num_orgs, num_gpes]
+
+def extract_comparison_features(statement):
+    # Keywords for different LIWC-like categories (simplified)
+    cognitive_words = ["think", "know", "understand", "believe"]
+    emotional_words = ["happy", "sad", "angry", "fear"]
+    social_words = ["friend", "family", "society"]
+
+    # Tokenize statement and count keywords
+    vectorizer = CountVectorizer(vocabulary=cognitive_words + emotional_words + social_words)
+    word_counts = vectorizer.fit_transform([statement]).toarray().flatten()
+
+    # Divide word counts into different categories
+    num_cognitive = sum(word_counts[:len(cognitive_words)])
+    num_emotional = sum(word_counts[len(cognitive_words):len(cognitive_words) + len(emotional_words)])
+    num_social = sum(word_counts[-len(social_words):])
+
+    return [num_cognitive, num_emotional, num_social]
+
+def compute_factuality_score(statement):
+    # Extract features
+    struct_features = structural_analysis(statement)
+    graph_features = extract_graph_features(statement)
+    comp_features = extract_comparison_features(statement)
+
+    all_features = np.array(struct_features + graph_features + comp_features)
+
+    # Apply Rescaling to Large Features
+    rescaled_features = np.array([
+        all_features[0] / 50,  # Sentence length
+        all_features[1] / 10,  # Tree depth
+        all_features[2],       # Polarity
+        all_features[3],       # Subjectivity
+
+        all_features[4] / 10,  # POS Nouns
+        all_features[5] / 10,  # POS Verbs
+        all_features[6] / 10,  # POS Adjectives
+        all_features[7] / 5,   # Named Entities - Persons
+        all_features[8] / 5,   # Named Entities - Organizations
+        all_features[9] / 5,   # Named Entities - GPE
+
+        all_features[10],      # Cognitive words
+        all_features[11],      # Emotional words
+        all_features[12],      # Social words
+    ])
+
+    # Adjusted Weights
+    weights = np.array([
+        0.15, 0.15, 0.10, 0.10,  # Structural: length, depth, polarity, subjectivity
+        0.10, 0.10, 0.10, 0.05, 0.05, 0.04,  # Graph: POS, Entities
+        0.02, 0.02, 0.02  # Comparison: Cognitive, Emotional, Social words
+    ])
+
+    factuality_score = np.dot(rescaled_features, weights)
+    print(factuality_score)
+
+    # Convert to 1-6 scale
+    rating = round(min(max(factuality_score * 5 + 1, 1), 6), 1)
+
+    return rating
+
+def extract_feature(statement):
+    return np.array(structural_analysis(statement) + extract_graph_features(statement) + extract_comparison_features(statement))
+
+# Function to scrape one page of fact-checks
+def scrape_fact_checks(page_number):
+    url = f"https://www.politifact.com/factchecks/?page={page_number}"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # List to store the fact-check data
+    data = []
+
+    # Find all fact-check articles on the page
+    fact_checks = soup.find_all('article', class_='m-statement')
+
+    for fact in fact_checks:
+        # Extract Author/Speaker
+        author = fact.find('a', class_='m-statement__name').text.strip()
+
+        # Extract the Date of the statement
+        date_string = fact.find('div', class_='m-statement__desc').text.strip()
+
+        # Use a regular expression to extract only the date portion (e.g., October 8, 2024)
+        date_match = re.search(r'([A-Za-z]+ \d{1,2}, \d{4})', date_string)
+        date = date_match.group(0) if date_match else "No date found"
+
+        # Extract the Claim (statement being fact-checked)
+        claim = fact.find('div', class_='m-statement__quote').find('a').text.strip()
+
+        # Extract the URL to the full fact-check article
+        link = "https://www.politifact.com" + fact.find('div', class_='m-statement__quote').find('a')['href']
+
+        # Extract the Rating (e.g., False, Pants on Fire)
+        rating = fact.find('div', class_='m-statement__meter').find('img')['alt'].strip()
+
+        # Append the extracted information to the list
+        data.append({
+            'Author/Speaker': author,
+            'Date': date,
+            'Claim': claim,
+            'Rating': rating,
+            'Link to Full Article': link
+        })
+
+    return data
+
+# Loop through multiple pages and collect data
+def scrape_multiple_pages(start_page, end_page):
+    all_data = []
+    for page_number in range(start_page, end_page + 1):
+        print(f"Scraping page {page_number}...")
+        page_data = scrape_fact_checks(page_number)
+        all_data.extend(page_data)
+        time.sleep(2)  # Sleep for 2 seconds between each page request
+
+    return all_data
+
+# Scrape data from page 1 to 2
+data = scrape_multiple_pages(1, 2)
+politifact_data = pd.DataFrame(data)
+test_link = politifact_data['Link to Full Article'].iloc[0]
+
+test_response = requests.get(test_link)
+soup = BeautifulSoup(test_response.text, 'html.parser')
+
+# FF: authenticity
+
+def cross_referenced(x, politifact_data):
+    # Get the 'statement' column from the Liar Plus dataset and 'Claim' from PolitiFact
+    liar_statements = x['Statement']
+    politifact_claims = politifact_data['Claim']
+
+    # Use TF-IDF Vectorizer to convert text to numerical features
+    vectorizer = TfidfVectorizer(stop_words='english')
+
+    # Combine both statements and claims for vectorization
+    combined_text = pd.concat([liar_statements, politifact_claims], axis=0)
+
+    # Fit and transform the combined text using TF-IDF
+    tfidf_matrix = vectorizer.fit_transform(combined_text)
+
+    # Split the transformed matrix into two parts: one for Liar Plus, one for PolitiFact
+    liar_tfidf = tfidf_matrix[:len(liar_statements)]
+    politifact_tfidf = tfidf_matrix[len(liar_statements):]
+
+    # Compute cosine similarity between every statement in Liar Plus and every claim in PolitiFact
+    similarity_matrix = cosine_similarity(liar_tfidf, politifact_tfidf)
+
+    # Find the highest similarity score for each Liar Plus statement
+    max_similarity = similarity_matrix.max(axis=1)
+
+    # Set a threshold for similarity (e.g., 0.8) to define a "cross-referenced" statement
+    threshold = 0.8
+    return (max_similarity >= threshold).astype(int)
+
+
+
+# Define a credibility score based on job title (you can customize this based on your data)
+def assign_credibility_score(job_title):
+    if "scientist" in job_title.lower() or "doctor" in job_title.lower():
+        return 3  # High credibility
+    elif "senator" in job_title.lower() or "president" in job_title.lower():
+        return 2  # Medium credibility
+    else:
+        return 1  # Low credibility
+
+
+
+# Function to detect if justification contains references to studies or data
+def contains_cited_data(justification):
+    keywords = ['according to', 'research', 'study', 'data', 'shown by', 'reported']
+    for keyword in keywords:
+        if keyword in justification.lower():
+            return 1  # Cited data present
+    return 0  # No cited data
+
+def compute_authenticity_score(statement, job_title, justification, politifact_data):
+    # Compute cross-referenced similarity (Binary: 0 or 1)
+    cross_ref_score = cross_referenced(pd.DataFrame({'Statement': [statement]}), politifact_data)[0]
+
+    # Assign credibility score based on job title (1, 2, or 3) → Scale to [0,1]
+    raw_credibility_score = assign_credibility_score(job_title)  # 1, 2, or 3
+    credibility_score = raw_credibility_score / 3  # Normalize to [0,1]
+
+    # Check if justification contains cited data (Binary: 0 or 1)
+    cited_data_score = contains_cited_data(justification)
+
+    # Feature Vector (All in range [0,1])
+    feature_vector = np.array([cross_ref_score, credibility_score, cited_data_score])
+
+    # Adjusted Weights
+    weights = np.array([0.20, 0.60, 0.20])
+
+    # Compute weighted authenticity score
+    authenticity_score = np.dot(feature_vector, weights)
+    print(authenticity_score)
+
+    # Convert to 1-6 scale
+    rating = round(min(max((authenticity_score * 5) + 1, 1), 6), 1)  # Adjusted scaling
+
+    return rating
+
+## Linguistic based
+
+sid = SentimentIntensityAnalyzer()
+
+# Vectorizer
+vectorizer = CountVectorizer(stop_words='english', max_features=50)
+
+def fit_vectorizer(X):
+    """Fit the vectorizer on the 'Statement' column of X."""
+    vectorizer.fit(X['Statement'])
+
+def transform_data(X):
+    """Transform the data and generate the feature set."""
+    features = []
+    
+    # Token/word count for normalization
+    X['chunk_length'] = X['Statement'].apply(lambda x: len(x.split()))
+
+    # Writing style and linguistic features
+    X['exclamation_count'] = X['Statement'].apply(lambda x: x.count('!')) / X['chunk_length']
+    X['question_mark_count'] = X['Statement'].apply(lambda x: x.count('?')) / X['chunk_length']
+    X['all_caps_count'] = X['Statement'].apply(lambda x: len(re.findall(r'\b[A-Z]{2,}\b', x))) / X['chunk_length']
+    
+    # Named Entity Count: Counts the number of named entities in the statement using spaCy
+    X['entity_count'] = X['Statement'].apply(lambda x: len(nlp(x).ents)) / X['chunk_length']
+    
+    # Superlative and adjective count using spaCy
+    X['superlative_count'] = X['Statement'].apply(lambda x: len(re.findall(r'\b(best|worst|most|least)\b', x.lower()))) / X['chunk_length']
+    X['adjective_count'] = X['Statement'].apply(lambda x: len([token for token in nlp(x) if token.pos_ == 'ADJ'])) / X['chunk_length']
+
+    # Emotion-based word count
+    emotion_words = set(['disaster', 'amazing', 'horrible', 'incredible', 'shocking', 'unbelievable'])
+    X['emotion_word_count'] = X['Statement'].apply(lambda x: len([word for word in x.lower().split() if word in emotion_words])) / X['chunk_length']
+
+    # Modal verb count
+    modal_verbs = set(['might', 'could', 'must', 'should', 'would', 'may'])
+    X['modal_verb_count'] = X['Statement'].apply(lambda x: len([word for word in x.lower().split() if word in modal_verbs])) / X['chunk_length']
+
+    # Complex word ratio
+    X['complex_word_ratio'] = X['Statement'].apply(lambda x: len([word for word in x.split() if len(re.findall(r'[aeiouy]+', word)) > 2]) / (len(x.split()) + 1))
+
+    # Sentiment analysis using VADER
+    X['sentiment_polarity'] = X['Statement'].apply(lambda x: sid.polarity_scores(x)['compound'])
+    X['sentiment_subjectivity'] = X['Statement'].apply(lambda x: sid.polarity_scores(x)['neu'])  # Using VADER's neutrality score
+
+    # Flesch Reading Ease
+    X['flesch_reading_ease'] = X['Statement'].apply(flesch_reading_ease)
+
+    # Combine all features into a dataframe
+    numerical_features = X[['exclamation_count', 'question_mark_count', 'all_caps_count',
+                            'entity_count', 'superlative_count', 'adjective_count',
+                            'emotion_word_count', 'modal_verb_count', 
+                            'complex_word_ratio', 
+                            'sentiment_polarity', 'sentiment_subjectivity', 'flesch_reading_ease']]
+    
+    features.append(numerical_features)
+    return pd.concat(features, axis=1)
+
+def flesch_reading_ease(text):
+    """Compute Flesch Reading Ease score for readability analysis."""
+    sentence_count = max(len(re.split(r'[.!?]+', text)), 1)
+    word_count = len(text.split())
+    syllable_count = sum([syllable_count_func(word) for word in text.split()])
+    if word_count > 0:
+        return (206.835 - 1.015 * (word_count / sentence_count) - 84.6 * (syllable_count / word_count)) / 100
+    else:
+        return 0
+
+def syllable_count_func(word):
+    """Count syllables in a word using regular expressions."""
+    word = word.lower()
+    syllables = re.findall(r'[aeiouy]+', word)
+    return max(len(syllables), 1)
+
+# Load SpaCy NLP model
+nlp = spacy.load("en_core_web_sm")
+sid = SentimentIntensityAnalyzer()
+
+def compute_linguistic_persuasion_score(statement):
+    """
+    Computes a persuasion/exaggeration score based on a single statement.
+    """
+
+    # Token/word count for normalization
+    chunk_length = max(len(statement.split()), 1)
+
+    # Writing style and linguistic features
+    exclamation_count = (statement.count('!') / chunk_length) * 10  # Increased scaling
+    question_mark_count = (statement.count('?') / chunk_length) * 10  
+    all_caps_count = (len(re.findall(r'\b[A-Z]{2,}\b', statement)) / chunk_length) * 6  
+
+    # Named Entity Count
+    doc = nlp(statement)
+    entity_count = (len(doc.ents) / chunk_length) * 3  # Scaled up
+
+    # Superlative and adjective count
+    superlative_count = (len(re.findall(r'\b(best|worst|most|least)\b', statement.lower())) / chunk_length) * 8  
+    adjective_count = (len([token for token in doc if token.pos_ == 'ADJ']) / chunk_length) * 2  
+
+    # Emotion-based words
+    emotion_words = {'disaster', 'amazing', 'horrible', 'incredible', 'shocking', 'unbelievable'}
+    emotion_word_count = (len([word for word in statement.lower().split() if word in emotion_words]) / chunk_length) * 7  
+
+    # Modal verb count
+    modal_verbs = {'might', 'could', 'must', 'should', 'would', 'may'}
+    modal_verb_count = (len([word for word in statement.lower().split() if word in modal_verbs]) / chunk_length) * 5  
+
+    # Complex word ratio
+    complex_word_ratio = len([word for word in statement.split() if len(re.findall(r'[aeiouy]+', word)) > 2]) / chunk_length  
+
+    # Sentiment analysis using VADER
+    sentiment_polarity = abs(sid.polarity_scores(statement)['compound'])  # Stronger absolute polarity affects factuality
+    sentiment_subjectivity = 1 - sid.polarity_scores(statement)['neu']  # Higher non-neutrality affects factuality
+
+    def flesch_reading_ease(text):
+        """Compute Flesch Reading Ease score for readability analysis."""
+        sentence_count = max(len(re.split(r'[.!?]+', text)), 1)
+        word_count = len(text.split())
+
+        def syllable_count_func(word):
+            """Count syllables in a word using regex."""
+            word = word.lower()
+            syllables = re.findall(r'[aeiouy]+', word)
+            return max(len(syllables), 1)
+        
+        syllable_count = sum([syllable_count_func(word) for word in text.split()])
+        if word_count > 0:
+            return (206.835 - 1.015 * (word_count / sentence_count) - 84.6 * (syllable_count / word_count)) / 100
+        else:
+            return 0
+    
+    # Readability score (Flesch Reading Ease)
+    flesch_reading_ease = flesch_reading_ease(statement) / 100  # Scale it to [0,1]
+
+    # Apply **non-linear transformation** to exaggeration & sentiment
+    exaggeration_score = (
+        exclamation_count**1.2 + 
+        question_mark_count**1.2 + 
+        all_caps_count**1.2 + 
+        superlative_count**1.2 + 
+        emotion_word_count**1.2 + 
+        modal_verb_count**1.2
+    ) / 6  
+
+    sentiment_score = (sentiment_polarity**1.5 + sentiment_subjectivity**1.5 + flesch_reading_ease) / 3  
+
+    linguistic_complexity = (entity_count - adjective_count + complex_word_ratio) / 3  
+
+    # Feature Vector
+    feature_vector = np.array([
+        exaggeration_score,  
+        linguistic_complexity,  
+        sentiment_score  
+    ])
+
+    print("Feature values:", feature_vector)  # Debugging
+
+    # Adjusted Weights
+    weights = np.array([0.55, 0.25, 0.20])
+
+    # Compute weighted persuasion score
+    persuasion_score = np.dot(feature_vector, weights)
+
+    # **Adjust scaling to create more spread in scores**
+    adjusted_score = np.tanh(persuasion_score)  # Apply **non-linear scaling**
+    print(adjusted_score)
+    rating = round(min(max(((adjusted_score) * 5) + 1, 1), 6)  , 1)
+
+    return rating
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8080))  # Default port to 8080 if Render does not set PORT
+    me.run(port=port, host="0.0.0.0")  # Ensure the app binds to the correct host and port
