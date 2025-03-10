@@ -128,11 +128,3 @@ This project was developed by:
 ### Mentor:
 
 - **Dr. Ali Arsanjani**
-
-## Recent Updates
-- **Added support for multi-input document processing (URL & file upload).**
-- **Refactored predictive models to provide clearer factuality factor breakdowns.**
-- **Enhanced UI integration for interactive result visualization.**
-- **Improved web scraping functionality using SerpApi for claim verification.**
-
-This README reflects the latest developments and improvements in the project.
