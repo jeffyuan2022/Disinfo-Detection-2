@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Generative AI: Disinformation Detection 
+title: AI-Powered Misinformation Detection
 description: Yiheng Yuan, Luran Zhang, Jade Zhou
 ---
 
@@ -46,14 +46,14 @@ description: Yiheng Yuan, Luran Zhang, Jade Zhou
     <div class="container">
         <header>
             <p>
-                Welcome! This site explores how we’re using artificial intelligence to detect and combat misinformation and disinformation. 
+                Welcome! This site explores how we’re using artificial intelligence to detect and combat misinformation. 
                 With the rapid spread of news through social media and online platforms, it has become increasingly difficult to determine which information is credible. 
                 Our project leverages both <strong>machine learning</strong> and <strong>generative AI</strong> to analyze news articles, rank their credibility, and provide explanations for how truthful (or misleading) they might be.
             </p>
         </header>
 
         <section>
-            <h2>Introduction - What’s This All About?</h2>
+            <h2>What’s This All About?</h2>
             <p>
                 Misinformation and disinformation have become major challenges in the digital age. <strong>Misinformation</strong> refers to false or misleading content that is spread unintentionally, 
                 while <strong>disinformation</strong> is deliberately crafted to deceive audiences. Both pose serious risks, from influencing public opinion and elections to spreading harmful health advice. 
@@ -66,7 +66,7 @@ description: Yiheng Yuan, Luran Zhang, Jade Zhou
         </section>
 
         <section>
-            <h2>Methodology - How Does It Work?</h2>
+            <h2>How Does It Work?</h2>
 
             <h3>Step 1: Scraping and Storing News Content</h3>
             <p>
@@ -91,7 +91,7 @@ description: Yiheng Yuan, Luran Zhang, Jade Zhou
                 <li><strong>Historical patterns</strong> – Does this claim align with previously debunked misinformation?</li>
             </ul>
             <p>
-                Based on these factors, the predictive model generates a <strong>veracity score</strong> ranging from 0 (completely false) to 6 (completely true). 
+                Based on these factors, the predictive model generates a <strong>veracity score</strong> ranging from 0 (completely false) to 1 (completely true). 
                 However, some statements may fall into a gray area, where additional context is required to assess accuracy.
             </p>
 
@@ -100,7 +100,6 @@ description: Yiheng Yuan, Luran Zhang, Jade Zhou
                 This is where our <strong>generative AI model</strong> comes into play. Unlike predictive models, which rely on predefined rules and historical data, 
                 generative AI can <strong>analyze the meaning, bias, and coherence of statements in real time</strong>. 
                 We use <strong>Google Gemini</strong>, a cutting-edge large language model, to evaluate misinformation based on nuanced <strong>contextual understanding</strong>.
-                To further explore the capability of genertative AI, we experimented different prompting styles including normal chain-of-thoughts and fractal chain-of-thoughts, which tells the AI to think step by step.
             </p>
 
             <h3>Step 4: Bringing It All Together</h3>
@@ -111,16 +110,19 @@ description: Yiheng Yuan, Luran Zhang, Jade Zhou
         </section>
 
         <section>
-            <h2>Conclusion - Why Does This Matter?</h2>
+            <h2>Why Does This Matter?</h2>
             <p>
                 The spread of misinformation can have <strong>real-world consequences</strong>. False information has fueled public health crises, influenced elections, and even led to violence.
                 Social media algorithms often <strong>amplify sensational content</strong>, making misinformation spread even faster than factual news.
             </p>
             <p>
+<<<<<<< HEAD
                 The spread of misinformation can have <strong>real-world consequences</strong>. False information has fueled public health crises, influenced elections, and even led to violence.
                 Social media algorithms often <strong>amplify sensational content</strong>, making misinformation spread even faster than factual news.
             </p>
             <p>
+=======
+>>>>>>> parent of 84ec2c2 (added table)
                 Our goal is to provide an <strong>AI-powered solution</strong> that helps combat misinformation at scale. By using a <strong>hybrid detection approach</strong>, 
                 we hope to create a system that is <strong>more reliable, adaptable, and transparent</strong> than traditional fact-checking methods.
             </p>
