@@ -40,22 +40,6 @@ description: Yiheng Yuan, Luran Zhang, Jade Zhou
             font-size: 0.9em;
             color: gray;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            border: 1px solid black;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        td:last-child {
-            width: 40%; /* Ensures text wrapping for the last column */
-            word-wrap: break-word;
-        }
     </style>
 </head>
 <body>
@@ -133,44 +117,9 @@ description: Yiheng Yuan, Luran Zhang, Jade Zhou
                 Social media algorithms often <strong>amplify sensational content</strong>, making misinformation spread even faster than factual news.
             </p>
             <p>
-                To best resolve this problem, we explored different prompting styles during our experimentation and the result is as follows:
+                The spread of misinformation can have <strong>real-world consequences</strong>. False information has fueled public health crises, influenced elections, and even led to violence.
+                Social media algorithms often <strong>amplify sensational content</strong>, making misinformation spread even faster than factual news.
             </p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Factuality Factors</th>
-                        <th>Normal CoT (1 to 6)</th>
-                        <th>FCoT (1 to 6)</th>
-                        <th>Comparison</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Biases</td>
-                        <td>4</td>
-                        <td>4.5</td>
-                        <td>FCoT is more critical of missing counterarguments and detects subtle biases better.</td>
-                    </tr>
-                    <tr>
-                        <td>Context Veracity</td>
-                        <td>4</td>
-                        <td>3.75</td>
-                        <td>FCoT penalizes unverified claims more heavily and is stricter on context shifts.</td>
-                    </tr>
-                    <tr>
-                        <td>Information Utility</td>
-                        <td>4.25</td>
-                        <td>4.5</td>
-                        <td>FCoT values completeness, considering historical context like past recalls to improve article usefulness.</td>
-                    </tr>
-                    <tr>
-                        <td>Average</td>
-                        <td>4.08</td>
-                        <td>4.25</td>
-                        <td>The article selected is factual, and FCoT provided better precision in evaluating it.</td>
-                    </tr>
-                </tbody>
-            </table>
             <p>
                 Our goal is to provide an <strong>AI-powered solution</strong> that helps combat misinformation at scale. By using a <strong>hybrid detection approach</strong>, 
                 we hope to create a system that is <strong>more reliable, adaptable, and transparent</strong> than traditional fact-checking methods.
